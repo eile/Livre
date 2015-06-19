@@ -37,6 +37,7 @@
 #ifdef LIVRE_USE_ZEQ
 #  include <zeq/zeq.h>
 #  include <zeq/hbp/hbp.h>
+#  include <zeq/hbp/lookupTable1D.h>
 #endif
 
 #ifdef LIVRE_USE_RESTBRIDGE
@@ -59,6 +60,22 @@ namespace
 typedef boost::shared_ptr< zeq::Subscriber > SubscriberPtr;
 typedef boost::shared_ptr< zeq::Publisher > PublisherPtr;
 typedef std::vector< SubscriberPtr > Subscribers;
+
+class LookupTable1D : public zeq::hbp::LookupTable1D
+{
+public:
+    LookupTable1D( RenderSettingsPtr settings ) : _settings( settings ) {}
+
+private:
+    RenderSettingsPtr _settings;
+
+    void notifyUpdated() final
+    {
+        // TODO: and here we have at least a double copy...
+        _settings->setTransferFunction( TransferFunction1Dc( getLutVector( )));
+    }
+};
+
 #endif
 }
 
@@ -73,8 +90,9 @@ public:
         , eventMapper( EventHandlerFactoryPtr( new EqEventHandlerFactory ))
         , volumeBBox( Boxf::makeUnitBox( ))
 #ifdef LIVRE_USE_ZEQ
+        , lut( framedata.getRenderSettings( ))
+        , vwsPublisher()
         , _publisher( lunchbox::URI( "hbp://" ))
-        , _vwsPublisher()
 #endif
     {}
 
@@ -85,6 +103,14 @@ public:
     Boxf volumeBBox;
 
 #ifdef LIVRE_USE_ZEQ
+    LookupTable1D lut;
+    Subscribers subscribers;
+    PublisherPtr vwsPublisher;
+    lunchbox::Clock heartbeatClock;
+#ifdef LIVRE_USE_RESTBRIDGE
+    boost::shared_ptr< restbridge::RestBridge > restBridge;
+#endif
+
     void publishModelView()
     {
         CameraSettingsPtr cameraSettings = framedata.getCameraSettings();
@@ -127,7 +153,7 @@ public:
             vocabulary.push_back( zeq::EventDescriptor( zeq::vocabulary::EXIT, zeq::vocabulary::EVENT_EXIT,
                                                         zeq::vocabulary::SCHEMA_EXIT, zeq::PUBLISHER ) );
             const zeq::Event& vocEvent = zeq::vocabulary::serializeVocabulary( vocabulary );
-            _vwsPublisher->publish( vocEvent );
+            vwsPublisher->publish( vocEvent );
         }
         else if( eventType == zeq::vocabulary::EVENT_EXIT )
             config->stopRunning();
@@ -172,14 +198,6 @@ public:
         cameraSettings->setModelViewMatrix( modelViewMatrix );
     }
 
-    void onLookupTable1D( const zeq::Event& event )
-    {
-        const TransferFunction1Dc transferFunction(
-            zeq::hbp::deserializeLookupTable1D( event ));
-        RenderSettingsPtr renderSettings = framedata.getRenderSettings();
-        renderSettings->setTransferFunction( transferFunction );
-    }
-
     void onFrame( const zeq::Event& event )
     {
         const zeq::hbp::data::Frame& frame =
@@ -196,7 +214,7 @@ public:
 
     void publishExit()
     {
-        _vwsPublisher->publish( zeq::Event( zeq::vocabulary::EVENT_EXIT ));
+        vwsPublisher->publish( zeq::Event( zeq::vocabulary::EVENT_EXIT ));
     }
 
     void publishFrame()
@@ -211,13 +229,9 @@ public:
                                     params.animation )));
     }
 
-    Subscribers subscribers;
+
+private:
     zeq::Publisher _publisher;
-    lunchbox::Clock _heartbeatClock;
-    PublisherPtr _vwsPublisher;
-#ifdef LIVRE_USE_RESTBRIDGE
-    boost::shared_ptr< restbridge::RestBridge > _restBridge;
-#endif
 #endif
 };
 }
@@ -321,11 +335,11 @@ uint32_t Config::startFrame()
     const eq::uint128_t& version = _impl->framedata.commit();
     frameSettings->setGrabFrame( false );
 #ifdef LIVRE_USE_ZEQ
-    if( _impl->_heartbeatClock.getTimef() >= DEFAULT_HEARTBEAT_TIME )
+    if( _impl->heartbeatClock.getTimef() >= DEFAULT_HEARTBEAT_TIME )
     {
         _impl->_heartbeatClock.reset();
-        _impl->_vwsPublisher->publish(
-            zeq::Event( zeq::vocabulary::EVENT_HEARTBEAT ));
+        _impl->vwsPublisher->publish(
+            zeq::Event( zeq::vocabulary::EVENT_HEARTBEAT ) );
     }
 #endif
     return eq::Config::startFrame( version );
@@ -521,7 +535,7 @@ bool Config::handleEvent( eq::EventICommand command )
 
             const zeq::hbp::data::ImageJPEG image( dataSize, dataPtr );
             const zeq::Event& image_event = zeq::hbp::serializeImageJPEG( image );
-            _impl->_vwsPublisher->publish( image_event );
+            _impl->vwsPublisher->publish( image_event );
             return false;
         }
 #endif

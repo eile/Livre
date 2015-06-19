@@ -1,8 +1,8 @@
-/* Copyright (c) 2011-2014, EPFL/Blue Brain Project
- *                     Ahmet Bilgili <ahmet.bilgili@epfl.ch>
- *                     Maxim Makhinya <maxmah@gmail.com>
- *                     David Steiner  <steiner@ifi.uzh.ch>
- *                     Fatih Erol
+/* Copyright (c) 2011-2015, EPFL/Blue Brain Project
+ *                          Ahmet Bilgili <ahmet.bilgili@epfl.ch>
+ *                          Maxim Makhinya <maxmah@gmail.com>
+ *                          David Steiner  <steiner@ifi.uzh.ch>
+ *                          Fatih Erol
  *
  * This file is part of Livre <https://github.com/BlueBrain/Livre>
  *
@@ -25,6 +25,7 @@
 
 #include <livre/core/Render/TransferFunction1D.h>
 #include <zeq/zeq.h>
+#include <zeq/hbp/lookupTable1D.h>
 
 namespace livre
 {
@@ -59,6 +60,7 @@ public:
 
 private:
     TransferFunction1DfPtr _transferFunction;
+    zeq::hbp::LookupTable1D _lut;
     zeq::Publisher _publisher;
 };
 

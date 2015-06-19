@@ -44,17 +44,14 @@ bool Controller::connect( const std::string& /*hostname*/,
 
 void Controller::publishTransferFunction( )
 {
-    UInt8Vector rgbai;
+    uint8_t* rgbai = _lut.getLut();
     const FloatVector& rgbaf = _transferFunction->getData();
-    rgbai.resize( rgbaf.size(), 0 );
 
-    for( uint32_t i = 0; i < rgbaf.size( ); ++i )
-    {
+    for( size_t i = 0; i < rgbaf.size(); ++i )
         rgbai[ i ] = uint8_t( rgbaf[ i ] *
                               std::numeric_limits< uint8_t >::max( ));
-    }
 
-    _publisher.publish( zeq::hbp::serializeLookupTable1D( rgbai ));
+    _publisher.publish( _lut );
 }
 
 TransferFunction1DfPtr Controller::getTransferFunction() const
