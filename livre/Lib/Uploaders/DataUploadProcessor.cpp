@@ -199,7 +199,6 @@ void DataUploadProcessor::runLoop_( )
 void DataUploadProcessor::_loadData()
 {
     const DashRenderStatus& renderStatus = _dashTree->getRenderStatus();
-
     const Frustum& frustum = renderStatus.getFrustum();
     _currentFrameID = renderStatus.getFrameID();
 
@@ -215,7 +214,8 @@ void DataUploadProcessor::_loadData()
     DFSTraversal traverser;
     traverser.traverse( rootNode, depthCollectorVisitor, _currentFrameID );
 
-    std::sort( dashNodeList.begin( ), dashNodeList.end( ), DepthCompare( frustum ));
+    std::sort( dashNodeList.begin(), dashNodeList.end(),
+               DepthCompare( frustum ));
     CollectionTraversal collectionTraverser;
     DepthSortedDataLoaderVisitor refLevelDataLoaderVisitor( _dashTree,
                                                             _rawDataCache,

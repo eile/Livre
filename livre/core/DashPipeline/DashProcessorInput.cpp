@@ -91,21 +91,24 @@ bool DashProcessorInput::apply_( const uint32_t inputConnection )
 bool DashProcessorInput::applyAll_( const uint32_t inputConnection )
 {
     DashConnectionPtr connection =  connectionMap_[ inputConnection ];
-    dash::Commit commit = connection->pop( );
+    {
+        // #75: This is a blocking call each frame, and has to wait for at least
+        // one commit from the loader thread. removing it causes flickering in
+        // animation due to #62
+        dash::Commit commit = connection->pop();
+        if( commit.getImpl()->empty() )
+            return false;
+
+        getDashContext()->apply( commit );
+    }
 
     std::vector< dash::Commit > commits;
     connection->popAll( commits );
 
-    if( commits.empty() &&  commit.getImpl()->empty() )
-        return false;
+    BOOST_FOREACH( dash::Commit commit, commits )
+        getDashContext()->apply( commit );
 
-    getDashContext()->apply( commit );
-
-    for( std::vector< dash::Commit >::iterator it = commits.begin(); it != commits.end(); ++it )
-    {
-        getDashContext()->apply( *it );
-    }
-    return true;
+    return !commits.empty();
 }
 
 bool DashProcessorInput::applyAllTimed_( const uint32_t inputConnection, const uint32_t timeMs )

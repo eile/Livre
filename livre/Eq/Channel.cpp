@@ -380,9 +380,7 @@ public:
 
             const eq::Range& range = frame->getRange();
             if( range == eq::Range::ALL ) // 2D frame, assemble directly
-            {
                 eq::Compositor::assembleFrame( frame, _channel );
-            }
             else
             {
                 dbFrames.push_back( frame );
@@ -407,7 +405,8 @@ public:
         const Vector3f& cameraPosition = cameraSettings->getCameraPosition( );
 
         EQ_GL_CALL( glMultMatrixf( cameraRotation.array ) );
-        EQ_GL_CALL( glTranslatef( cameraPosition[ 0 ], cameraPosition[ 1 ], cameraPosition[ 2 ] ) );
+        EQ_GL_CALL( glTranslatef( cameraPosition[ 0 ], cameraPosition[ 1 ],
+                                  cameraPosition[ 2 ] ) );
         EQ_GL_CALL( glMultMatrixf( modelRotation.array ) );
     }
 

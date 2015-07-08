@@ -35,8 +35,8 @@ namespace livre
 {
 
 /**
- * The DataUploadProcessor class is responsible for loading data into CPU memory.
- * It is derived from GLContextTrait class because some algorithms may need OpenGL
+ * Loads data into CPU memory.
+ * Derived from GLContextTrait class because some algorithms may need OpenGL
  * to generate the data.
  */
 class DataUploadProcessor : public DashProcessor, private GLContextTrait
