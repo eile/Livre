@@ -69,13 +69,29 @@ public:
         if( !_publisher )
             return;
 
+        std::cout << "Pub " << modelView << std::endl;
         const FloatVector matrix( modelView.begin(), modelView.end( ));
         _publisher->publish( ::zeq::hbp::serializeCamera( matrix ));
     }
 
+    // HBP 'micron' camera from other brain applications
+    void onHBPCamera( const ::zeq::Event& event )
+    {
+        const auto& matrix = ::zeq::hbp::deserializeCamera( event );
+        Matrix4f modelViewMatrixMicron;
+        modelViewMatrixMicron.set( matrix.begin(), matrix.end(), false );
+        std::cout << "Get " << modelViewMatrixMicron << std::endl;
+
+        const auto& modelViewMatrix =
+                _config.convertFromHBPCamera( modelViewMatrixMicron );
+        auto cameraSettings = _config.getFrameData().getCameraSettings();
+        cameraSettings->setModelViewMatrix( modelViewMatrix );
+        _config.sendEvent( REDRAW );
+    }
+
     void publishCamera()
     {
-        if( !_publisher )
+        if( !_vwsPublisher )
             return;
 
         const auto cameraSettings = _config.getFrameData().getCameraSettings();
@@ -86,7 +102,7 @@ public:
 
     void publishExit()
     {
-        if( !_publisher )
+        if( !_vwsPublisher )
             return;
 
         _publisher->publish( ::zeq::Event( ::zeq::vocabulary::EVENT_EXIT ));
@@ -100,8 +116,9 @@ public:
 
         const auto& renderSettings = _config.getFrameData().getRenderSettings();
         const auto& lut = renderSettings->getTransferFunction().getData();
-        _vwsPublisher->publish( ::zeq::hbp::serializeLookupTable1D( lut ));
         _publisher->publish( ::zeq::hbp::serializeLookupTable1D( lut ) );
+        if( _vwsPublisher )
+            _vwsPublisher->publish( ::zeq::hbp::serializeLookupTable1D( lut ));
     }
 
     void publishFrame()
@@ -127,7 +144,8 @@ public:
                                             frameMax,
                                             params.animation ));
         _publisher->publish( frame );
-        _vwsPublisher->publish( frame );
+        if( _vwsPublisher )
+            _vwsPublisher->publish( frame );
     }
 
     void publishVocabulary()
@@ -173,10 +191,11 @@ public:
         if( _heartbeatClock.getTimef() >= DEFAULT_HEARTBEAT_TIME )
         {
             _heartbeatClock.reset();
-            _vwsPublisher->publish(
-                ::zeq::Event( ::zeq::vocabulary::EVENT_HEARTBEAT ));
             _publisher->publish(
                 ::zeq::Event( ::zeq::vocabulary::EVENT_HEARTBEAT ));
+            if( _vwsPublisher )
+                _vwsPublisher->publish(
+                    ::zeq::Event( ::zeq::vocabulary::EVENT_HEARTBEAT ));
         }
     }
 
@@ -204,20 +223,6 @@ public:
         const auto& matrix = ::zeq::hbp::deserializeCamera( event );
         Matrix4f modelViewMatrix;
         modelViewMatrix.set( matrix.begin(), matrix.end(), false );
-        auto cameraSettings = _config.getFrameData().getCameraSettings();
-        cameraSettings->setModelViewMatrix( modelViewMatrix );
-        _config.sendEvent( REDRAW );
-    }
-
-    // HBP 'micron' camera from other brain applications
-    void onHBPCamera( const ::zeq::Event& event )
-    {
-        const auto& matrix = ::zeq::hbp::deserializeCamera( event );
-        Matrix4f modelViewMatrixMicron;
-        modelViewMatrixMicron.set( matrix.begin(), matrix.end(), false );
-
-        const auto& modelViewMatrix =
-                _config.convertFromHBPCamera( modelViewMatrixMicron );
         auto cameraSettings = _config.getFrameData().getCameraSettings();
         cameraSettings->setModelViewMatrix( modelViewMatrix );
         _config.sendEvent( REDRAW );

@@ -59,38 +59,28 @@ public:
         modelView.set_translation( cameraSettings->getCameraPosition() );
         modelView = cameraSettings->getCameraRotation() * modelView;
 
-        Matrix3f rotation;
-        Vector3f eyePos;
-        maths::getRotationAndEyePositionFromModelView( modelView,
-                                                       rotation,
-                                                       eyePos );
+        const Vector3f& size = volumeBBox.getDimension();
+        modelView.scale_translation( Vector3f( size.find_max( )));
 
-        const Vector3f& circuitCenter = volumeBBox.getCenter();
-        const Vector3f& circuitSize = volumeBBox.getDimension();
-        const float isotropicScale = circuitSize.find_max();
+        const Vector3f& center = volumeBBox.getCenter();
+        modelView.set_translation( modelView.get_translation() - center );
 
-        eyePos = ( eyePos * isotropicScale ) + circuitCenter;
-
-        modelView = maths::computeModelViewMatrix( rotation, eyePos );
-
+        modelView.scale_translation( Vector3f( 1000000.f )); // to microns
         communicator->publishModelView( modelView );
 #endif
     }
 
-    Matrix4f convertFromHBPCamera( const Matrix4f& modelViewMatrix ) const
+    Matrix4f convertFromHBPCamera( Matrix4f modelView ) const
     {
-        const Vector3f circuitCenter = volumeBBox.getCenter();
-        const Vector3f circuitSize = volumeBBox.getDimension();
-        const float isotropicScale = circuitSize.find_max();
+        modelView.scale_translation( Vector3f( .000001f )); // from microns
 
-        Matrix3f rotation;
-        Vector3f eyePos;
-        maths::getRotationAndEyePositionFromModelView( modelViewMatrix,
-                                                       rotation,
-                                                       eyePos );
+        const Vector3f& center = volumeBBox.getCenter();
+        modelView.set_translation( modelView.get_translation() + center );
 
-        eyePos = ( eyePos - circuitCenter ) / isotropicScale;
-        return maths::computeModelViewMatrix( rotation, eyePos );
+        const Vector3f& size = volumeBBox.getDimension();
+        modelView.scale_translation( Vector3f( 1.f / size.find_max( )));
+
+        return modelView;
     }
 
     Config* config;
@@ -189,7 +179,7 @@ bool Config::init()
 
 uint32_t Config::frame()
 {
-    // Set current frame (start/end may have changed)
+    // Set (revalidate) current frame (start/end may have changed from ZeroEQ)
     FrameSettingsPtr frameSettings = _impl->framedata.getFrameSettings();
     ApplicationParameters& params = getApplicationParameters();
 
@@ -203,10 +193,11 @@ uint32_t Config::frame()
                        frameSettings->getFrameNumber() : start;
 
     frameSettings->setFrameNumber( current );
+
+    // Commit frame counter for current frame
     const eq::uint128_t& version = _impl->framedata.commit();
 
-    // reset data and advance current frame
-    frameSettings->setGrabFrame( false );
+    // Advance current frame for next frame
     uint32_t end = frameMax > current ? frameMax : current;
 
     const int32_t delta = params.animation;
@@ -220,6 +211,7 @@ uint32_t Config::frame()
 
     const uint32_t frameNumber = (( current - start + delta ) % interval ) + start;
     frameSettings->setFrameNumber( frameNumber );
+    frameSettings->setGrabFrame( false );
 
     _impl->redraw = false;
     _impl->communicator->publishFrame();
