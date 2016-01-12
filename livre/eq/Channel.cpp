@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2006-2015, Stefan Eilemann <eile@equalizergraphics.com>
+/* Copyright (c) 2006-2016, Stefan Eilemann <eile@equalizergraphics.com>
  *                          Maxim Makhinya <maxmah@gmail.com>
  *                          Ahmet Bilgili <ahmet.bilgili@epfl.ch>
  *                          Daniel Nachbaur <daniel.nachbaur@epfl.ch>
@@ -69,7 +69,6 @@ namespace detail
 class EqRenderView : public RenderView
 {
 public:
-
     EqRenderView( Channel* channel, ConstDashTreePtr dashTree );
     const Frustum& getFrustum() const final;
 
@@ -298,15 +297,17 @@ public:
 #endif
     }
 
-    void frameDraw( const eq::uint128_t& )
+    void frameRender()
     {
+        _renderBricks.clear();
+
         livre::Node* node = static_cast< livre::Node* >( _channel->getNode( ));
-        const DashRenderStatus& renderStatus = node->getDashTree()->getRenderStatus();
+        const DashRenderStatus& renderStatus =
+            node->getDashTree()->getRenderStatus();
         const uint32_t frame = renderStatus.getFrameID();
         if( frame >= INVALID_FRAME )
             return;
 
-        applyCamera();
         setupFrustum();
         const DashRenderNodes& visibles = requestData();
 
@@ -336,24 +337,30 @@ public:
 
         const AvailableSetGenerator generateSet( node->getDashTree(),
                                                  window->getTextureCache( ));
-
         _frameInfo.clear();
         for( const auto& visible : visibles )
             _frameInfo.allNodes.push_back(visible.getLODNode().getNodeId());
         generateSet.generateRenderingSet( _frameInfo );
 
-        EqRenderViewPtr renderViewPtr =
+        EqRenderViewPtr renderView =
                 boost::static_pointer_cast< EqRenderView >( _renderViewPtr );
         RayCastRendererPtr renderer =
                 boost::static_pointer_cast< RayCastRenderer >(
-                    renderViewPtr->getRenderer( ));
+                    renderView->getRenderer( ));
 
         renderer->update( *pipe->getFrameData( ));
+        generateRenderBricks( _frameInfo.renderNodes, _renderBricks );
+    }
 
-        RenderBricks renderBricks;
-        generateRenderBricks( _frameInfo.renderNodes, renderBricks );
-        renderViewPtr->render( _frameInfo, renderBricks, *_glWidgetPtr );
-        updateRegions( renderBricks );
+    void frameDraw()
+    {
+        applyCamera();
+        EqRenderViewPtr renderView =
+            boost::static_pointer_cast< EqRenderView >( _renderViewPtr );
+        RenderBricks bricks( 1, _renderBricks.back( ));
+        _renderBricks.pop_back();
+        renderView->render( _frameInfo, bricks, *_glWidgetPtr );
+        updateRegions( bricks );
     }
 
     void applyCamera()
@@ -526,11 +533,11 @@ public:
             }
         }
 
-        LBINFO << "Frame order: ";
-        for( const eq::Frame* frame : dbFrames )
-            LBINFO << frame->getName() <<  " "
-                   << frame->getFrameData()->getRange() << " : ";
-        LBINFO << std::endl;
+        // LBINFO << "Frame order: ";
+        // for( const eq::Frame* frame : dbFrames )
+        //     LBINFO << frame->getName() <<  " "
+        //            << frame->getFrameData()->getRange() << " : ";
+        // LBINFO << std::endl;
 
         try // blend DB frames in computed order
         {
@@ -642,6 +649,7 @@ public:
     GLWidgetPtr _glWidgetPtr;
     FrameGrabber _frameGrabber;
     FrameInfo _frameInfo;
+    RenderBricks _renderBricks;
 };
 
 EqRenderView::EqRenderView( Channel* channel,
@@ -690,10 +698,20 @@ void Channel::frameStart( const eq::uint128_t& frameID,
     eq::Channel::frameStart( frameID, frameNumber );
 }
 
+bool Channel::frameRender( const eq::RenderContext& context,
+                           const eq::Frames& frames )
+{
+    overrideContext( context );
+    _impl->frameRender();
+    while( !_impl->_renderBricks.empty( ))
+        return eq::Channel::frameRender( context, frames );
+    return false;
+}
+
 void Channel::frameDraw( const lunchbox::uint128_t& frameId )
 {
     eq::Channel::frameDraw( frameId );
-    _impl->frameDraw( frameId );
+    _impl->frameDraw();
 }
 
 void Channel::frameFinish( const eq::uint128_t& frameID, const uint32_t frameNumber )
