@@ -91,6 +91,9 @@ RenderParametersController::RenderParametersController( Controller& controller,
     : QWidget( parentWgt )
     , _impl( new RenderParametersController::Impl( this, controller ))
 {
+    connect( this, &RenderParametersController::paramsUpdated,
+             this, &RenderParametersController::onParamsUpdated );
+
     connect( _impl->_ui.maxLODSpinBox,
              static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
              [this]( int ) { _impl->publish(); });
@@ -112,6 +115,11 @@ RenderParametersController::RenderParametersController( Controller& controller,
 
 RenderParametersController::~RenderParametersController( )
 {
+}
+
+void RenderParametersController::onParamsUpdated()
+{
+    _impl->onParamsUpdated();
 }
 
 }
