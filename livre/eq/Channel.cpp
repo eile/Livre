@@ -518,7 +518,8 @@ public:
             {
                 _frame.readback( _channel->getObjectManager(),
                                  _channel->getDrawableConfig(),
-                                 _channel->getRegions( ));
+                                 _channel->getRegions(),
+                                 _channel->getContext( ));
                 clearViewport( coveredPVP );
                 // offset for assembly
                 _frame.setOffset( eq::Vector2i( coveredPVP.x, coveredPVP.y ));
