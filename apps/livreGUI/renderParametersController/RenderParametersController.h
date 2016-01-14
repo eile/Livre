@@ -42,12 +42,6 @@ public:
                                 QWidget *parentWgt = nullptr );
     ~RenderParametersController( );
 
-signals:
-    void paramsUpdated();
-
-private Q_SLOTS:
-    void onParamsUpdated();
-
 private:
     struct Impl;
     std::unique_ptr< Impl > _impl;

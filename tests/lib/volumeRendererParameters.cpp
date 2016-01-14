@@ -48,7 +48,7 @@ BOOST_AUTO_TEST_CASE(genericParams)
 {
     livre::VolumeRendererParameters params;
     params.setMinLOD( 2 );
-    const zerobuf::Data& zerobuf = params.toBinary();
+    const servus::Serializable::Data& zerobuf = params.toBinary();
     BOOST_CHECK( zerobuf.size > 0 );
     BOOST_CHECK_EQUAL( params.getZerobufNumDynamics(), 0 );
 

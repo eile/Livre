@@ -278,6 +278,8 @@ private:
             std::bind( &Impl::requestImageJPEG, this );
         _requests[::zeq::vocabulary::EVENT_EXIT] =
             std::bind( &Impl::requestExit, this );
+        _requests[::zeq::vocabulary::EVENT_VOCABULARY] =
+            std::bind( &Impl::publishVocabulary, this );
         _requests[ VolumeRendererParameters::TYPE_IDENTIFIER() ] = [&]
             { _publisher->publish( _config.getFrameData().getVRParameters( )); };
     }
