@@ -55,7 +55,7 @@ set(LIVRELIB_SOURCES
   visitor/CollectionTraversal.cpp
   visitor/DFSTraversal.cpp)
 
-set(LIVRELIB_LINK_LIBRARIES PUBLIC LivreCore ZeroBuf
+set(LIVRELIB_LINK_LIBRARIES PUBLIC LivreCore
                             PRIVATE Equalizer ${VTUNE_LIBRARIES})
 
 if(LIVRE_USE_REMOTE_DATASOURCE)

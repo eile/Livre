@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2006-2015, Stefan Eilemann <eile@equalizergraphics.com>
+/* Copyright (c) 2006-2016, Stefan Eilemann <eile@equalizergraphics.com>
  *                          Maxim Makhinya <maxmah@gmail.com>
  *                          Ahmet Bilgili <ahmet.bilgili@epfl.ch>
  *                          Daniel Nachbaur <daniel.nachbaur@epfl.ch>
@@ -187,9 +187,7 @@ public:
     {
         const CameraSettings& cameraSettings =
             getFrameData()->getCameraSettings();
-        Matrix4f modelView = cameraSettings.getModelViewMatrix();
-        modelView = _channel->getHeadTransform() * modelView;
-        return modelView;
+        return _channel->getHeadTransform() * cameraSettings.computeMatrix();
     }
 
     void clearViewport( const eq::PixelViewport &pvp )
@@ -360,7 +358,7 @@ public:
     {
         const CameraSettings& cameraSettings =
             getFrameData()->getCameraSettings();
-        glMultMatrixf( cameraSettings.getModelViewMatrix().array );
+        glMultMatrixf( cameraSettings.computeMatrix().array );
     }
 
     void configInit()

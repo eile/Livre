@@ -1,4 +1,6 @@
-/* Copyright (c) 2006-2015, Daniel.Nachbaur@epfl.ch
+
+/* Copyright (c) 2015-2016, Daniel.Nachbaur@epfl.ch
+ *                          Stefan.Eilemann@epfl.ch
  *
  * This file is part of Livre <https://github.com/BlueBrain/Livre>
  *
@@ -28,14 +30,11 @@
 #include <livre/lib/configuration/ApplicationParameters.h>
 #include <livre/lib/configuration/VolumeRendererParameters.h>
 
-#include <lunchbox/clock.h>
-#include <servus/uri.h>
+#include <zerobuf/render/lookupTable1D.h>
 #include <zeq/zeq.h>
 #include <zeq/hbp/hbp.h>
-
-#ifdef LIVRE_USE_RESTBRIDGE
-#  include <restbridge/RestBridge.h>
-#endif
+#include <lunchbox/clock.h>
+#include <servus/uri.h>
 
 #include <functional>
 #include <map>
@@ -56,56 +55,19 @@ public:
         if( !servus::Servus::isAvailable( ))
             return;
 
-        _setupPublisher();
         _setupRequests();
-        _setupRESTBridge( argc, argv );
-        _setupSubscribers();
+        _setupSubscriber();
+        _setupHTTPServer( argc, argv );
     }
 
-    void publishModelView( const Matrix4f& modelView )
+    bool publishExit()
     {
-        if( !_publisher )
-            return;
-
-        const FloatVector matrix( modelView.begin(), modelView.end( ));
-        _publisher->publish( ::zeq::hbp::serializeCamera( matrix ));
+        return _publisher.publish( ::zeq::Event( ::zeq::vocabulary::EVENT_EXIT ));
     }
 
-    void publishCamera()
+    bool publishFrame()
     {
-        if( !_publisher )
-            return;
-
-        const auto& cameraSettings = _config.getFrameData().getCameraSettings();
-        const Matrix4f& modelView = cameraSettings.getModelViewMatrix();
-        const FloatVector matrix( modelView.begin(), modelView.end( ));
-        _publisher->publish( ::zeq::hbp::serializeCamera( matrix ));
-    }
-
-    void publishExit()
-    {
-        if( !_publisher )
-            return;
-
-        _publisher->publish( ::zeq::Event( ::zeq::vocabulary::EVENT_EXIT ));
-    }
-
-    void publishLookupTable1D()
-    {
-        if( !_publisher )
-            return;
-
-        const auto& renderSettings = _config.getFrameData().getRenderSettings();
-        const auto& lut = renderSettings.getTransferFunction().getData();
-        _publisher->publish( ::zeq::hbp::serializeLookupTable1D( lut ) );
-    }
-
-    void publishFrame()
-    {
-        if( !_publisher )
-            return;
-
-        const auto& frameSettings = _config.getFrameData().getFrameSettings();
+        const auto& frameSettings = _getFrameData().getFrameSettings();
         const auto& params = _config.getApplicationParameters();
 
         const ::zeq::Event& frame = ::zeq::hbp::serializeFrame(
@@ -114,109 +76,38 @@ public:
                                             frameSettings.getFrameNumber(),
                                             params.frames[1],
                                             params.animation ));
-        _publisher->publish( frame );
+        return _publisher.publish( frame );
     }
 
-    void publishVolumeRendererParameters()
+    bool publishCamera()
     {
-         _publisher->publish( _config.getFrameData().getVRParameters( ));
-    }
-
-    void publishVocabulary()
-    {
-        if( !_publisher )
-            return;
-
-        ::zeq::EventDescriptors vocabulary;
-        vocabulary.push_back(
-                    ::zeq::EventDescriptor( ::zeq::hbp::IMAGEJPEG,
-                                            ::zeq::hbp::EVENT_IMAGEJPEG,
-                                            ::zeq::hbp::SCHEMA_IMAGEJPEG,
-                                            ::zeq::PUBLISHER ));
-        vocabulary.push_back(
-                    ::zeq::EventDescriptor( ::zeq::hbp::CAMERA,
-                                            ::zeq::hbp::EVENT_CAMERA,
-                                            ::zeq::hbp::SCHEMA_CAMERA,
-                                            ::zeq::BIDIRECTIONAL ));
-        vocabulary.push_back(
-                    ::zeq::EventDescriptor( ::zeq::vocabulary::EXIT,
-                                            ::zeq::vocabulary::EVENT_EXIT,
-                                            ::zeq::vocabulary::SCHEMA_EXIT,
-                                            ::zeq::PUBLISHER ));
-        vocabulary.push_back(
-                    ::zeq::EventDescriptor( ::zeq::hbp::LOOKUPTABLE1D,
-                                            ::zeq::hbp::EVENT_LOOKUPTABLE1D,
-                                            ::zeq::hbp::SCHEMA_LOOKUPTABLE1D,
-                                            ::zeq::BIDIRECTIONAL ));
-        vocabulary.push_back(
-                    ::zeq::EventDescriptor( ::zeq::hbp::FRAME,
-                                            ::zeq::hbp::EVENT_FRAME,
-                                            ::zeq::hbp::SCHEMA_FRAME,
-                                            ::zeq::BIDIRECTIONAL ));
-        const auto& event = ::zeq::vocabulary::serializeVocabulary( vocabulary);
-        _publisher->publish( event );
+        return _publisher.publish( _getFrameData().getCameraSettings( ));
     }
 
     void publishHeartbeat()
     {
-        if( !_publisher )
-            return;
-
         if( _heartbeatClock.getTimef() >= DEFAULT_HEARTBEAT_TIME )
         {
             _heartbeatClock.reset();
-            _publisher->publish(
+            _publisher.publish(
                 ::zeq::Event( ::zeq::vocabulary::EVENT_HEARTBEAT ));
         }
     }
 
-    void publishImageJPEG( const uint8_t* data, const uint64_t size )
+    bool publishImageJPEG( const uint8_t* data, const uint64_t size )
     {
-        if( !_publisher )
-            return;
-
         const ::zeq::hbp::data::ImageJPEG image( size, data );
         const auto& event = ::zeq::hbp::serializeImageJPEG( image );
-        _publisher->publish( event );
+        return _publisher.publish( event );
     }
 
-    void onRequest( const ::zeq::Event& event )
+    bool onRequest( const ::zeq::Event& event )
     {
         const auto& eventType = ::zeq::vocabulary::deserializeRequest( event );
         const auto& i = _requests.find( eventType );
-        if( i != _requests.end( ))
-            i->second();
-    }
-
-    // Generic camera (from REST) in meters
-    void onCamera( const ::zeq::Event& event )
-    {
-        const auto& matrix = ::zeq::hbp::deserializeCamera( event );
-        Matrix4f modelViewMatrix;
-        modelViewMatrix.set( matrix.begin(), matrix.end(), false );
-        auto& cameraSettings = _config.getFrameData().getCameraSettings();
-        cameraSettings.setModelViewMatrix( modelViewMatrix );
-    }
-
-    // HBP 'micron' camera from other brain applications
-    void onHBPCamera( const ::zeq::Event& event )
-    {
-        const auto& matrix = ::zeq::hbp::deserializeCamera( event );
-        Matrix4f modelViewMatrixMicron;
-        modelViewMatrixMicron.set( matrix.begin(), matrix.end(), false );
-
-        const auto& modelViewMatrix =
-                _config.convertFromHBPCamera( modelViewMatrixMicron );
-        auto& cameraSettings = _config.getFrameData().getCameraSettings();
-        cameraSettings.setModelViewMatrix( modelViewMatrix );
-    }
-
-    void onLookupTable1D( const ::zeq::Event& event )
-    {
-        const TransferFunction1D transferFunction(
-            ::zeq::hbp::deserializeLookupTable1D( event ));
-        auto& renderSettings = _config.getFrameData().getRenderSettings();
-        renderSettings.setTransferFunction( transferFunction );
+        if( i == _requests.end( ))
+            return false;
+        return i->second();
     }
 
     void onFrame( const ::zeq::Event& event )
@@ -242,105 +133,87 @@ public:
         params.frames = { frame.start, frame.end };
     }
 
-    void requestImageJPEG()
+    bool requestImageJPEG()
     {
         _config.getFrameData().getFrameSettings().setGrabFrame( true );
+        return true;
     }
 
-    void requestExit()
+    bool requestExit()
     {
         _config.stopRunning();
+        return true;
     }
 
     void handleEvents()
     {
-        // Receiving all queued events from all receivers without blocking.
-        for( auto subscriber : subscribers )
-            while( subscriber->receive( 0 ))
-                _config.sendEvent( REDRAW );
+        while( _subscriber.receive( 0 ))
+            _config.sendEvent( REDRAW );
     }
 
 private:
-    void _setupPublisher()
-    {
-        _publisher.reset( new ::zeq::Publisher );
-    }
+    ::zeq::Subscriber _subscriber;
+    ::zeq::Publisher _publisher;
+    lunchbox::Clock _heartbeatClock;
+    typedef std::function< bool() > RequestFunc;
+    typedef std::map< ::zeq::uint128_t, RequestFunc > RequestFuncs;
+    RequestFuncs _requests;
+#ifdef ZEQ_USE_HTTPXX
+    std::unique_ptr< ::zeq::http::Server > _httpServer;
+#endif
+    Config& _config;
 
     void _setupRequests()
     {
-        _requests[::zeq::hbp::EVENT_CAMERA] =
-            std::bind( &Impl::publishCamera, this );
-        _requests[::zeq::hbp::EVENT_FRAME] =
-            std::bind( &Impl::publishFrame, this );
-        _requests[::zeq::hbp::EVENT_LOOKUPTABLE1D] =
-            std::bind( &Impl::publishLookupTable1D, this );
-        _requests[::zeq::hbp::EVENT_IMAGEJPEG] =
-            std::bind( &Impl::requestImageJPEG, this );
-        _requests[::zeq::vocabulary::EVENT_EXIT] =
-            std::bind( &Impl::requestExit, this );
+        _requests[::zeq::hbp::EVENT_FRAME] = [&]{ return publishFrame(); };
+        _requests[::zeq::hbp::EVENT_IMAGEJPEG] = [&]
+            { return requestImageJPEG(); };
+        _requests[::zeq::vocabulary::EVENT_EXIT] = [&]{ return requestExit(); };
         _requests[ VolumeRendererParameters::TYPE_IDENTIFIER() ] = [&]
-            { _publisher->publish( _config.getFrameData().getVRParameters( )); };
+            { return _publisher.publish( _getFrameData().getVRParameters( )); };
+        _requests[ ::zerobuf::render::Camera::TYPE_IDENTIFIER( )] = [&]
+            { return _publisher.publish( _getFrameData().getCameraSettings());};
+        _requests[ ::zerobuf::render::LookupTable1D::TYPE_IDENTIFIER( )] = [&]
+            {
+                return _publisher.publish(
+                    _getRenderSettings().getTransferFunction( ));
+            };
     }
 
-    void _setupRESTBridge( const int argc LB_UNUSED, char** argv LB_UNUSED )
+    void _setupHTTPServer( const int argc LB_UNUSED, char** argv LB_UNUSED )
     {
-#ifdef LIVRE_USE_RESTBRIDGE
-        _restBridge = restbridge::RestBridge::parse( *_publisher, argc, argv );
-        if( !_restBridge )
+#ifdef ZEQ_USE_HTTPXX
+        _httpServer = ::zeq::http::Server::parse( argc, argv, _subscriber );
+        if( !_httpServer )
             return;
 
-        SubscriberPtr subscriber(
-            new ::zeq::Subscriber( _restBridge->getSubscriberURI( )));
-        subscribers.push_back( subscriber );
-        subscriber->registerHandler( ::zeq::hbp::EVENT_CAMERA,
-                                        std::bind( &Impl::onCamera, this,
-                                                   std::placeholders::_1 ));
-        subscriber->registerHandler( ::zeq::vocabulary::EVENT_REQUEST,
-                                        std::bind( &Impl::onRequest, this,
-                                                   std::placeholders::_1 ));
-        subscriber->registerHandler( ::zeq::hbp::EVENT_FRAME,
-                                        std::bind( &Impl::onFrame, this,
-                                                   std::placeholders::_1 ));
-        subscriber->registerHandler( ::zeq::hbp::EVENT_LOOKUPTABLE1D,
-                                        std::bind( &Impl::onLookupTable1D, this,
-                                                   std::placeholders::_1 ));
+        // subscriber->registerHandler( ::zeq::hbp::EVENT_FRAME,
+        //                                 std::bind( &Impl::onFrame, this,
+        //                                            std::placeholders::_1 ));
+        _httpServer->add( _getFrameData().getCameraSettings( ));
+        _httpServer->add( _getRenderSettings().getTransferFunction( ));
 #endif
     }
 
-    void _setupSubscribers()
+    void _setupSubscriber()
     {
-        SubscriberPtr subscriber( new ::zeq::Subscriber );
-
-        subscribers.push_back( subscriber );
-        subscriber->registerHandler( ::zeq::hbp::EVENT_CAMERA,
-                                     std::bind( &Impl::onHBPCamera,
-                                                this, std::placeholders::_1 ));
-        subscriber->registerHandler( ::zeq::hbp::EVENT_LOOKUPTABLE1D,
-                                     std::bind( &Impl::onLookupTable1D,
-                                                this, std::placeholders::_1 ));
-        subscriber->registerHandler( ::zeq::hbp::EVENT_FRAME,
-                                     std::bind( &Impl::onFrame,
-                                                 this, std::placeholders::_1 ));
-        subscriber->registerHandler( ::zeq::vocabulary::EVENT_REQUEST,
-                                     std::bind( &Impl::onRequest,
-                                                this, std::placeholders::_1 ));
-        subscriber->subscribe( _config.getFrameData().getVRParameters( ));
+        _subscriber.registerHandler( ::zeq::hbp::EVENT_FRAME,
+                                     [ this ]( const ::zeq::Event& event )
+                                         { onFrame( event ); } );
+        _subscriber.registerHandler( ::zeq::vocabulary::EVENT_REQUEST,
+                                     [ this ]( const ::zeq::Event& event )
+                                         { onRequest( event ); } );
+        _subscriber.subscribe( _getFrameData().getVRParameters( ));
+        _subscriber.subscribe( _getFrameData().getCameraSettings( ));
+        _subscriber.subscribe( _getRenderSettings().getTransferFunction( ));
     }
 
-    typedef std::shared_ptr< ::zeq::Subscriber > SubscriberPtr;
-    typedef std::shared_ptr< ::zeq::Publisher > PublisherPtr;
-    typedef std::vector< SubscriberPtr > Subscribers;
-
-    Subscribers subscribers;
-    PublisherPtr _publisher;
-    lunchbox::Clock _heartbeatClock;
-    typedef std::function< void() > RequestFunc;
-    typedef std::map< ::zeq::uint128_t, RequestFunc > RequestFuncs;
-    RequestFuncs _requests;
-#ifdef LIVRE_USE_RESTBRIDGE
-    std::unique_ptr< restbridge::RestBridge > _restBridge;
-#endif
-    Config& _config;
+    FrameData& _getFrameData() { return _config.getFrameData(); }
+    const FrameData& _getFrameData() const { return _config.getFrameData(); }
+    RenderSettings& _getRenderSettings()
+        { return _getFrameData().getRenderSettings(); }
+    const RenderSettings& _getRenderSettings() const
+        { return _getFrameData().getRenderSettings(); }
 };
 
 Communicator::Communicator( Config& config, const int argc, char* argv[] )
@@ -357,11 +230,6 @@ void Communicator::publishImageJPEG( const uint8_t* data, const uint64_t size )
     _impl->publishImageJPEG( data, size );
 }
 
-void Communicator::publishModelView( const Matrix4f& modelView )
-{
-    _impl->publishModelView( modelView );
-}
-
 void Communicator::publishHeartbeat()
 {
     _impl->publishHeartbeat();
@@ -375,6 +243,11 @@ void Communicator::publishExit()
 void Communicator::publishFrame()
 {
     _impl->publishFrame();
+}
+
+void Communicator::publishCamera()
+{
+    _impl->publishCamera();
 }
 
 void Communicator::handleEvents()
