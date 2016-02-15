@@ -233,41 +233,41 @@ public:
         glScissor( 0, 0, channelPvp.w, channelPvp.h );
     }
 
-    void generateRenderBricks( const ConstCacheObjects& renderNodes,
-                               RenderBricks& renderBricks )
+    void generateRenderSets( const ConstCacheObjects& renderNodes,
+                             RenderSets& renderSets )
     {
+        LBDEBUG << "livre::detail::generateRenderSets() " << std::endl;
+        if( renderNodes.empty( ))
+            return;
+
+        RenderBricks renderBricks;
+        std::vector< livre::NodeId > nodeIds;
+
         renderBricks.reserve( renderNodes.size( ));
+        nodeIds.reserve( renderNodes.size( ));
         BOOST_FOREACH( const ConstCacheObjectPtr& cacheObject, renderNodes )
         {
             const ConstTextureObjectPtr texture =
                 boost::static_pointer_cast< const TextureObject >( cacheObject );
-
             RenderBrickPtr renderBrick( new RenderBrick( texture->getLODNode(),
                                                          texture->getTextureState( )));
             renderBricks.push_back( renderBrick );
+
+            const livre::NodeId nodeId = texture->getLODNode()->getNodeId();
+            nodeIds.push_back( nodeId );
         }
-    }
-
-    void generateRenderSets( const ConstCacheObjects& renderNodes,
-                             RenderSets& renderSets )
-    {
-        const uint32_t maxLevel = ( 1 << livre::NODEID_LEVEL_BITS ) - 1;
-        ConvexSetMap setMap;
-
-        if( renderNodes.empty() )
-            return;
 
         if( _drawRange == eq::Range::ALL )
         {
-            renderSets.resize( 1 );
-            generateRenderBricks( renderNodes, renderSets.front() );
+            renderSets.push_back( renderBricks );
             return;
         }
 
-        BOOST_FOREACH( const ConstCacheObjectPtr& cacheObject, renderNodes )
+        // Create initial convex sets and occupancy map
+        ConvexSetMap setMap;
+        const uint32_t maxLevel = ( 1 << livre::NODEID_LEVEL_BITS ) - 1;
+        BOOST_FOREACH( const livre::NodeId& nodeId, nodeIds )
         {
-            livre::NodeId nodeId =
-                    boost::static_pointer_cast< const TextureObject >( cacheObject )->getLODNode()->getNodeId();
             const uint32_t factor = 1 << ( maxLevel - nodeId.getLevel());
             const Vector3ui position = factor * nodeId.getPosition();
             const Boxui nodeBox( position, position + Vector3ui( factor ));
@@ -276,61 +276,65 @@ public:
 
         // Merge adjacent compatible sets
         bool merged = false;
-        bool restart = false;
+        bool extraPass = false;
         ConvexSetMap::iterator it = setMap.begin();
-        while ( it != setMap.end())
+        while ( it != setMap.end( ))
         {
             merged = false;
             for( size_t axis = 0; !merged && axis < 3; ++axis )
             {
                 ConvexSet& set = it->second;
                 Vector3ui mergePoint = set.box.getMin();
-                mergePoint[axis] = set.box.getDimension()[axis];
+                mergePoint[axis] = set.box.getMax()[axis];
 
                 LBDEBUG << "- Testing render set < " << set.box << " > at " << mergePoint << std::endl;
                 if( setMap.find( mergePoint) != setMap.end())
                 {
                     const ConvexSet& candidate = setMap[mergePoint];
                     LBDEBUG << "-- Candidate render set to be merged < " << candidate.box << std::endl;
+
                     if( set.box.getDimension()[( axis + 1 ) % 3] ==
                             candidate.box.getDimension()[( axis + 1 ) % 3] &&
                         set.box.getDimension()[( axis + 2 ) % 3] ==
                             candidate.box.getDimension()[( axis + 2 ) % 3] )
                     {
-                        LBDEBUG << "---     MERGED!!!" << std::endl;
+                        LBASSERT( setMap.find( mergePoint) != it );
+                        LBDEBUG << "--- **Merged**" << std::endl;
                         set.merge( candidate );
                         setMap.erase( mergePoint );
                         merged = true;
-                        restart = true;
+                        if( it != setMap.begin( ))
+                            extraPass = true;
                     };
                 }
             };
 
-            ++it;
-            if( it == setMap.end() && restart )
+            if( !merged )
+                ++it;
+
+            if( it == setMap.end() && extraPass )
             {
                 it = setMap.begin();
-                restart = false;
+                extraPass = false;
             }
         }
 
-        // Generate the render bricks for final render sets
-        size_t current = 0;
-        renderSets.resize( setMap.size() );
+        LBDEBUG << "livre::detail::generateRenderSets() -- Final sets generation" << std::endl;
+        renderSets.reserve( setMap.size() );
         for( auto setIt = setMap.begin(); setIt != setMap.end(); ++setIt )
         {
-            ConstCacheObjects renderSetNodes;
             const ConvexSet& set = setIt->second;
-            renderSetNodes.reserve( set.nodeIndexes.size());
+
+            renderSets.push_back( RenderBricks( ));
+            renderSets.back().reserve( set.nodeIndexes.size());
             for( auto nodeIdxIt = set.nodeIndexes.begin();
                  nodeIdxIt != set.nodeIndexes.end();
                  ++nodeIdxIt )
             {
-                renderSetNodes.push_back( renderNodes[ *nodeIdxIt ]);
+                renderSets.back().push_back( renderBricks[ *nodeIdxIt ]);
             }
-
-            generateRenderBricks( renderSetNodes, renderSets[current++] );
         }
+        LBDEBUG << "livre::detail::generateRenderSets() -- END" << std::endl;
     }
 
     DashRenderNodes requestData()
@@ -469,6 +473,7 @@ public:
 
     void frameDraw()
     {
+        LBDEBUG << "livre::detail::frameDraw() " << std::endl;
         applyCamera();
         EqRenderViewPtr renderView =
             boost::static_pointer_cast< EqRenderView >( _renderViewPtr );
