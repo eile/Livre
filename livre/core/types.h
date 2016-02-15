@@ -190,6 +190,7 @@ typedef std::vector< NodeId > NodeIds;
 typedef std::vector< CacheObjectPtr > CacheObjects;
 typedef std::vector< ConstCacheObjectPtr > ConstCacheObjects;
 typedef std::vector< RenderBrickPtr > RenderBricks;
+typedef std::vector< RenderBricks > RenderSets;
 typedef std::vector< TexturePoolPtr > TexturePools;
 
 /**

@@ -49,6 +49,7 @@
 #include <livre/core/dashpipeline/DashProcessorInput.h>
 #include <livre/core/dashpipeline/DashProcessorOutput.h>
 #include <livre/core/data/VolumeDataSource.h>
+#include <livre/core/mathTypes.h>
 #include <livre/core/render/FrameInfo.h>
 #include <livre/core/render/Frustum.h>
 #include <livre/core/render/GLWidget.h>
@@ -119,6 +120,35 @@ public:
 
 const float nearPlane = 0.1f;
 const float farPlane = 15.0f;
+
+/**
+ * The ConvexSet class implements a LODNnode convex set container for internal
+ * use of \see livre::detail::Channel.
+ */
+struct ConvexSet
+{
+    inline ConvexSet()
+    { }
+
+    inline ConvexSet( size_t nodeIdx, const Boxui& setBox )
+        : box( setBox )
+        , nodeIndexes{ nodeIdx }
+    { }
+
+    inline void merge( const ConvexSet& convexSet )
+    {
+        box.merge( convexSet.box );
+        nodeIndexes.insert( nodeIndexes.end(),
+                            convexSet.nodeIndexes.begin(),
+                            convexSet.nodeIndexes.end() );
+    }
+
+    Boxui box;
+    std::list< size_t > nodeIndexes;
+};
+
+typedef std::map< Vector3ui, ConvexSet > ConvexSetMap;
+
 
 class Channel
 {
@@ -218,6 +248,91 @@ public:
         }
     }
 
+    void generateRenderSets( const ConstCacheObjects& renderNodes,
+                             RenderSets& renderSets )
+    {
+        const uint32_t maxLevel = ( 1 << livre::NODEID_LEVEL_BITS ) - 1;
+        ConvexSetMap setMap;
+
+        if( renderNodes.empty() )
+            return;
+
+        if( _drawRange == eq::Range::ALL )
+        {
+            renderSets.resize( 1 );
+            generateRenderBricks( renderNodes, renderSets.front() );
+            return;
+        }
+
+        BOOST_FOREACH( const ConstCacheObjectPtr& cacheObject, renderNodes )
+        {
+            livre::NodeId nodeId =
+                    boost::static_pointer_cast< const TextureObject >( cacheObject )->getLODNode()->getNodeId();
+            const uint32_t factor = 1 << ( maxLevel - nodeId.getLevel());
+            const Vector3ui position = factor * nodeId.getPosition();
+            const Boxui nodeBox( position, position + Vector3ui( factor ));
+            setMap[position] = ConvexSet( setMap.size(), nodeBox);
+        }
+
+        // Merge adjacent compatible sets
+        bool merged = false;
+        bool restart = false;
+        ConvexSetMap::iterator it = setMap.begin();
+        while ( it != setMap.end())
+        {
+            merged = false;
+            for( size_t axis = 0; !merged && axis < 3; ++axis )
+            {
+                ConvexSet& set = it->second;
+                Vector3ui mergePoint = set.box.getMin();
+                mergePoint[axis] = set.box.getDimension()[axis];
+
+                LBDEBUG << "- Testing render set < " << set.box << " > at " << mergePoint << std::endl;
+                if( setMap.find( mergePoint) != setMap.end())
+                {
+                    const ConvexSet& candidate = setMap[mergePoint];
+                    LBDEBUG << "-- Candidate render set to be merged < " << candidate.box << std::endl;
+                    if( set.box.getDimension()[( axis + 1 ) % 3] ==
+                            candidate.box.getDimension()[( axis + 1 ) % 3] &&
+                        set.box.getDimension()[( axis + 2 ) % 3] ==
+                            candidate.box.getDimension()[( axis + 2 ) % 3] )
+                    {
+                        LBDEBUG << "---     MERGED!!!" << std::endl;
+                        set.merge( candidate );
+                        setMap.erase( mergePoint );
+                        merged = true;
+                        restart = true;
+                    };
+                }
+            };
+
+            ++it;
+            if( it == setMap.end() && restart )
+            {
+                it = setMap.begin();
+                restart = false;
+            }
+        }
+
+        // Generate the render bricks for final render sets
+        size_t current = 0;
+        renderSets.resize( setMap.size() );
+        for( auto setIt = setMap.begin(); setIt != setMap.end(); ++setIt )
+        {
+            ConstCacheObjects renderSetNodes;
+            const ConvexSet& set = setIt->second;
+            renderSetNodes.reserve( set.nodeIndexes.size());
+            for( auto nodeIdxIt = set.nodeIndexes.begin();
+                 nodeIdxIt != set.nodeIndexes.end();
+                 ++nodeIdxIt )
+            {
+                renderSetNodes.push_back( renderNodes[ *nodeIdxIt ]);
+            }
+
+            generateRenderBricks( renderSetNodes, renderSets[current++] );
+        }
+    }
+
     DashRenderNodes requestData()
     {
         livre::Node* node = static_cast< livre::Node* >( _channel->getNode( ));
@@ -299,7 +414,7 @@ public:
 
     void frameRender()
     {
-        _renderBricks.clear();
+        _renderSets.clear();
 
         livre::Node* node = static_cast< livre::Node* >( _channel->getNode( ));
         const DashRenderStatus& renderStatus =
@@ -349,7 +464,7 @@ public:
                     renderView->getRenderer( ));
 
         renderer->update( *pipe->getFrameData( ));
-        generateRenderBricks( _frameInfo.renderNodes, _renderBricks );
+        generateRenderSets( _frameInfo.renderNodes, _renderSets );
     }
 
     void frameDraw()
@@ -357,10 +472,12 @@ public:
         applyCamera();
         EqRenderViewPtr renderView =
             boost::static_pointer_cast< EqRenderView >( _renderViewPtr );
-        RenderBricks bricks( 1, _renderBricks.back( ));
-        _renderBricks.pop_back();
+        LBDEBUG << "Remaining render sets = " <<  _renderSets.size() << std::endl;
+        RenderBricks& bricks = _renderSets.back();
+        LBDEBUG << "Current render set bricks = " << bricks.size() << std::endl;
         renderView->render( _frameInfo, bricks, *_glWidgetPtr );
         updateRegions( bricks );
+        _renderSets.pop_back();
     }
 
     void applyCamera()
@@ -653,7 +770,7 @@ public:
     GLWidgetPtr _glWidgetPtr;
     FrameGrabber _frameGrabber;
     FrameInfo _frameInfo;
-    RenderBricks _renderBricks;
+    RenderSets _renderSets;
 };
 
 EqRenderView::EqRenderView( Channel* channel,
@@ -707,9 +824,11 @@ bool Channel::frameRender( const eq::RenderContext& context,
 {
     overrideContext( context );
     _impl->frameRender();
-    while( !_impl->_renderBricks.empty( ))
-        return eq::Channel::frameRender( context, frames );
-    return false;
+
+    bool hasAsyncReadback = false;
+    while( !_impl->_renderSets.empty( ))
+        hasAsyncReadback = eq::Channel::frameRender( context, frames ) || hasAsyncReadback;
+    return hasAsyncReadback;
 }
 
 void Channel::frameDraw( const lunchbox::uint128_t& frameId )
