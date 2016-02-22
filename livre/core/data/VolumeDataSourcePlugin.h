@@ -57,7 +57,7 @@ class VolumeDataSourcePlugin : public boost::noncopyable
 {
 public:
 
-    VolumeDataSourcePlugin();
+    LIVRECORE_API VolumeDataSourcePlugin();
 
     /** Needed by the PluginRegisterer. */
     typedef VolumeDataSourcePlugin PluginT;
@@ -89,7 +89,7 @@ public:
      * @param internalNode Internal node.
      * @param lodNode Destination lod node.
      */
-    LIVRECORE_API virtual void internalNodeToLODNode( const NodeId internalNode,
+    LIVRECORE_API virtual void internalNodeToLODNode( const NodeId& internalNode,
                                                       LODNode& lodNode ) const;
 
     /**
@@ -102,19 +102,16 @@ public:
      * @param nodeId The nodeId to get the node for.
      * @return The LODNode for the ID or 0 if not found.
      */
-    ConstLODNodePtr getNode( const NodeId nodeId ) const;
+    LODNode getNode( const NodeId& nodeId ) const;
 
 protected:
-    /**
-     * will be generated and mapped, where it can be modified with the derived
-     * class.
-     * @param nodeId The nodeId to get the node for.
-     * @return The LODNode for the ID. If not found, an invalid node is returned.
-     */
-    LODNodePtr _getNodeFromNodeID( uint32_t nodeId );
 
-    mutable NodeIDLODNodePtrMap _lodNodeMap;
+    typedef boost::unordered_map< NodeId, LODNode > NodeIDLODNodeMap;
+
+    mutable NodeIDLODNodeMap _lodNodeMap;
     VolumeInformation _volumeInfo;
+    mutable ReadWriteMutex _mutex;
+
 };
 
 /**

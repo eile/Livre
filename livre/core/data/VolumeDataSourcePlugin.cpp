@@ -26,14 +26,23 @@ namespace livre
 VolumeDataSourcePlugin::VolumeDataSourcePlugin()
 {}
 
-ConstLODNodePtr VolumeDataSourcePlugin::getNode( const NodeId nodeId ) const
+LODNode VolumeDataSourcePlugin::getNode( const NodeId& nodeId ) const
 {
-    NodeIDLODNodePtrMap::iterator it = _lodNodeMap.find( nodeId );
-    if( it == _lodNodeMap.end( ) || !it->second )
+    NodeIDLODNodeMap::iterator it;
     {
-        LODNodePtr lodNodePtr( new LODNode( ));
-        internalNodeToLODNode( nodeId, *lodNodePtr );
-        _lodNodeMap[ nodeId ] = lodNodePtr;
+        ReadLock lock( _mutex );
+        it = _lodNodeMap.find( nodeId );
+        if( it != _lodNodeMap.end( ))
+            return it->second;
+    }
+
+    WriteLock writeLock( _mutex );
+    it = _lodNodeMap.find( nodeId );
+    if( it == _lodNodeMap.end( ))
+    {
+        LODNode node;
+        internalNodeToLODNode( nodeId, node );
+        _lodNodeMap[ nodeId ] = node;
     }
 
     return _lodNodeMap[ nodeId ];
@@ -45,7 +54,7 @@ const VolumeInformation& VolumeDataSourcePlugin::getVolumeInformation() const
 }
 
 void VolumeDataSourcePlugin::internalNodeToLODNode(
-    const NodeId internalNode, LODNode& lodNode ) const
+    const NodeId& internalNode, LODNode& lodNode ) const
 {
     const uint32_t refLevel = internalNode.getLevel();
     const Vector3ui& bricksInRefLevel = _volumeInfo.rootNode.getBlockSize( refLevel );

@@ -18,35 +18,34 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#define BOOST_TEST_MODULE DataSource
+#define BOOST_TEST_MODULE DataCache
 #include <boost/test/unit_test.hpp>
 
 #include <livre/core/data/VolumeDataSource.h>
+
 #include <livre/core/data/NodeId.h>
 #include <livre/core/data/LODNode.h>
 #include <livre/core/data/MemoryUnit.h>
 #include <livre/core/data/VolumeInformation.h>
 #include <livre/core/mathTypes.h>
 
+#include <livre/lib/cache/TextureDataCache.h>
+#include <livre/lib/cache/TextureDataObject.h>
 
-namespace
-{
 const uint32_t BLOCK_SIZE = 32;
 const uint32_t VOXEL_SIZE_X = 1024;
 const uint32_t VOXEL_SIZE_Y = 1024;
 const uint32_t VOXEL_SIZE_Z = 512;
 
-void _testDataSource( const std::string& uriStr )
+BOOST_AUTO_TEST_CASE( testDataCache )
 {
-    const lunchbox::URI uri( uriStr );
+    std::stringstream volumeName;
+    volumeName << "mem://#" << VOXEL_SIZE_X << "," << VOXEL_SIZE_Y << ","
+               << VOXEL_SIZE_Z << "," << BLOCK_SIZE;
+
+    const lunchbox::URI uri( volumeName.str( ));
     livre::VolumeDataSource source( uri );
     const livre::VolumeInformation& info = source.getVolumeInformation();
-
-     // 32 << depth = 512 - shortest dimension of the volume.
-    BOOST_CHECK( info.rootNode.getDepth() == 5 );
-
-    // Component count per voxel, intensity only 1 channels.
-    BOOST_CHECK( info.compCount == 1 );
 
     const uint32_t level = 0;
     const livre::Vector3f position( 0, 0, 0);
@@ -56,52 +55,47 @@ void _testDataSource( const std::string& uriStr )
         parentNodeId.getChildren().front();
 
     const livre::LODNode& lodNode = source.getNode( firstChildNodeId );
-    BOOST_CHECK( lodNode.isValid( ));
-    BOOST_CHECK( lodNode.getVoxelBox().getDimension() =
-                 livre::Vector3ui( BLOCK_SIZE ));
 
     const livre::Vector3ui blockSize = lodNode.getBlockSize() +
                                        livre::Vector3ui( info.overlap ) * 2;
-    BOOST_CHECK( blockSize == info.maximumBlockSize );
 
+    // Read data manually
     livre::MemoryUnitPtr memUnit = source.getData( firstChildNodeId );
     const size_t allocSize = blockSize.product() *
                              info.compCount * info.getBytesPerVoxel();
 
-    BOOST_CHECK_EQUAL( memUnit->getMemSize(), allocSize );
-}
-}
 
-BOOST_AUTO_TEST_CASE( memoryDataSource )
-{
-    std::stringstream volumeName;
-    volumeName << "mem://#" << VOXEL_SIZE_X << "," << VOXEL_SIZE_Y << ","
-               << VOXEL_SIZE_Z << "," << BLOCK_SIZE;
+    // Read same data with the data cache
+    const size_t maxMemory = 2048;
+    const uint32_t destGPUDataType = 5121; // GL_UNSIGNED_BYTE;
+    livre::TextureDataCache dataCache( maxMemory, source, destGPUDataType );
+    livre::CacheObjectPtr data = dataCache.get( firstChildNodeId.getId( ));
+    BOOST_CHECK( dataCache.getCount() == 1 );
+    BOOST_CHECK( !data->isLoaded( ));
+    BOOST_CHECK( data->getId() == firstChildNodeId.getId( ));
+    data->load();
+    BOOST_CHECK( data->isLoaded( ));
 
-    _testDataSource( volumeName.str( ));
+    data = dataCache.get( livre::INVALID_CACHE_ID );
+    BOOST_CHECK( dataCache.getCount() == 1 );
+    BOOST_CHECK( data.get() == 0 );
+
+    // get() on cache returns already loaded data
+    data = dataCache.get( firstChildNodeId.getId( ));
+    BOOST_CHECK( data->isLoaded( ));
+    BOOST_CHECK( dataCache.getCount() == 1 );
+
+    livre::TextureDataObjectPtr dataObject =
+            boost::dynamic_pointer_cast< livre::TextureDataObject >( data );
+
+    BOOST_CHECK( dataObject );
+    BOOST_CHECK( dataObject->getSize() == allocSize );
+    BOOST_CHECK( dataCache.getStatistics().getUsedMemory() == allocSize );
+
+    const uint8_t* manual = memUnit->getData< const uint8_t >();
+    const uint8_t* cached = static_cast< const uint8_t* >( dataObject->getDataPtr( ));
+
+    BOOST_CHECK_EQUAL_COLLECTIONS( manual, manual + allocSize,
+                                   cached, cached + allocSize );
+
 }
-
-#ifdef LIVRE_USE_REMOTE_DATASOURCE
-BOOST_AUTO_TEST_CASE( remoteMemoryDataSource )
-{
-    char** argv = boost::unit_test::framework::master_test_suite().argv;
-    if( std::string( argv[0] ).find( "perf-" ) == std::string::npos )
-        return;
-
-    std::stringstream volumeName;
-    volumeName << "remotemem://#" << VOXEL_SIZE_X << "," << VOXEL_SIZE_Y << ","
-               << VOXEL_SIZE_Z << "," << BLOCK_SIZE;
-    try
-    {
-        _testDataSource( volumeName.str( ));
-    }
-    catch( const std::runtime_error& e )
-    {
-        const std::string error( e.what( ));
-        const std::string noSource( "Cannot connect to publisher" );
-        if( error != noSource )
-            BOOST_CHECK_EQUAL( error,
-                               std::string( "Empty servus implementation" ));
-    }
-}
-#endif

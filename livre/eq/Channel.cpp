@@ -127,13 +127,12 @@ const float farPlane = 15.0f;
  */
 struct ConvexSet
 {
-    inline ConvexSet()
-    { }
+    inline ConvexSet() {}
 
     inline ConvexSet( size_t nodeIdx, const Boxui& setBox )
         : box( setBox )
         , nodeIndexes{ nodeIdx }
-    { }
+    {}
 
     inline void merge( const ConvexSet& convexSet )
     {
@@ -149,14 +148,13 @@ struct ConvexSet
 
 typedef std::map< Vector3ui, ConvexSet > ConvexSetMap;
 
-
 class Channel
 {
 public:
     explicit Channel( livre::Channel* channel )
           : _channel( channel )
           , _glWidgetPtr( new EqGLWidget( channel ))
-          , _frameInfo( _frustum )
+          , _frameInfo( _frustum, INVALID_FRAME )
     {}
 
     void initializeFrame()
@@ -195,11 +193,11 @@ public:
         RendererPtr renderer( new RayCastRenderer(
                                   nSamplesPerRay,
                                   nSamplesPerPixel,
-                                  dataSource->getVolumeInformation(),
                                   GL_UNSIGNED_BYTE,
-                                  GL_LUMINANCE8 ));
+                                  GL_LUMINANCE8,
+                                  dataSource->getVolumeInformation( )));
 
-        _renderViewPtr->setRenderer( renderer);
+        _renderViewPtr->setRenderer( renderer );
     }
 
     const Frustum& setupFrustum()
@@ -236,13 +234,21 @@ public:
     void generateRenderBricks( const ConstCacheObjects& renderNodes,
                                RenderBricks& renderBricks )
     {
+
         renderBricks.reserve( renderNodes.size( ));
-        BOOST_FOREACH( const ConstCacheObjectPtr& cacheObject, renderNodes )
+
+        livre::Node* node = static_cast< livre::Node* >( _channel->getNode( ));
+        DashTreePtr dashTree = node->getDashTree();
+
+        for( const ConstCacheObjectPtr& cacheObject: renderNodes )
         {
             const ConstTextureObjectPtr texture =
                 boost::static_pointer_cast< const TextureObject >( cacheObject );
 
-            RenderBrickPtr renderBrick( new RenderBrick( texture->getLODNode(),
+            const LODNode& lodNode =
+                    dashTree->getDataSource()->getNode( NodeId( cacheObject->getId( )));
+
+            RenderBrickPtr renderBrick( new RenderBrick( lodNode,
                                                          texture->getTextureState( )));
             renderBricks.push_back( renderBrick );
         }
@@ -371,8 +377,9 @@ public:
         const Matrix4f& mvpMatrix = _frustum.getModelViewProjectionMatrix();
         for( const RenderBrickPtr& brick : bricks )
         {
-            const Vector3f& min = brick->getLODNode()->getWorldBox().getMin();
-            const Vector3f& max = brick->getLODNode()->getWorldBox().getMax();
+            const Boxf& worldBox = brick->getLODNode().getWorldBox();
+            const Vector3f& min = worldBox.getMin();
+            const Vector3f& max = worldBox.getMax();
             const Vector3f corners[8] =
             {
                 Vector3f( min[0], min[1], min[2] ),
@@ -424,8 +431,9 @@ public:
             return;
 
         setupFrustum();
-        const DashRenderNodes& visibles = requestData();
+        _frameInfo = FrameInfo( _frustum, frame );
 
+        const DashRenderNodes& visibles = requestData();
         const eq::fabric::Viewport& vp = _channel->getViewport( );
         const Viewport viewport( vp.x, vp.y, vp.w, vp.h );
         _renderViewPtr->setViewport( viewport );
@@ -452,7 +460,6 @@ public:
 
         const AvailableSetGenerator generateSet( node->getDashTree(),
                                                  window->getTextureCache( ));
-        _frameInfo.clear();
         for( const auto& visible : visibles )
             _frameInfo.allNodes.push_back(visible.getLODNode().getNodeId());
         generateSet.generateRenderingSet( _frameInfo );
@@ -498,6 +505,7 @@ public:
 
     void configExit()
     {
+        _frameInfo.renderNodes.clear();
         _frame.getFrameData()->flush();
         _renderViewPtr.reset();
     }
@@ -627,7 +635,7 @@ public:
             eq::FrameDataPtr data = _frame.getFrameData();
             _frame.clear( );
             _frame.setOffset( eq::Vector2i( 0, 0 ));
-            data->setRange( _drawRange );
+            data->getContext().range = _drawRange;
             data->setPixelViewport( coveredPVP );
             dbFrames.push_back( &_frame );
         }
@@ -654,12 +662,6 @@ public:
             }
         }
 
-        // LBINFO << "Frame order: ";
-        // for( const eq::Frame* frame : dbFrames )
-        //     LBINFO << frame->getName() <<  " "
-        //            << frame->getFrameData()->getRange() << " : ";
-        // LBINFO << std::endl;
-
         try // blend DB frames in computed order
         {
             eq::Compositor::blendFrames( dbFrames, _channel, 0 );
@@ -671,13 +673,16 @@ public:
 
         // Update draw range
         for( size_t i = 0; i < dbFrames.size(); ++i )
-            _drawRange.merge( dbFrames[i]->getRange( ));
+            _drawRange.merge( dbFrames[i]->getFrameData()->getContext().range );
     }
 
     bool useDBSelfAssemble() const { return _drawRange != eq::Range::ALL; }
 
     static bool cmpRangesInc(const eq::Frame* a, const eq::Frame* b )
-        { return a->getRange().start > b->getRange().start; }
+    {
+        return a->getFrameData()->getContext().range.start >
+               b->getFrameData()->getContext().range.start;
+    }
 
     void prepareFramesAndSetPvp( const eq::Frames& frames,
                                  eq::Frames& dbFrames,
@@ -691,7 +696,7 @@ public:
                 frame->waitReady( );
             }
 
-            const eq::Range& range = frame->getRange();
+            const eq::Range& range = frame->getFrameData()->getContext().range;
             if( range == eq::Range::ALL ) // 2D frame, assemble directly
             {
                 eq::Compositor::assembleFrame( frame, _channel );
@@ -728,7 +733,8 @@ public:
         // of projection to the middle of slices' boundaries
         for( const eq::Frame* frame : frames )
         {
-            const double px = -1.0 + frame->getRange().end*2.0;
+            const double px = -1.0 +
+                            frame->getFrameData()->getContext().range.end * 2.0;
             const Vector4f pS = modelView * Vector4f( 0.0f, 0.0f, px, 1.0f );
             Vector3f pSsub( pS[ 0 ], pS[ 1 ], pS[ 2 ] );
             pSsub.normalize();
@@ -826,8 +832,9 @@ bool Channel::frameRender( const eq::RenderContext& context,
     _impl->frameRender();
 
     bool hasAsyncReadback = false;
-    while( !_impl->_renderSets.empty( ))
-        hasAsyncReadback = eq::Channel::frameRender( context, frames ) || hasAsyncReadback;
+    while( !_impl->renderSets.empty( ))
+        if( eq::Channel::frameRender( context, frames ))
+            hasAsyncReadback = true;
     return hasAsyncReadback;
 }
 
