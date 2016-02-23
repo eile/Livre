@@ -155,16 +155,11 @@ public:
           : _channel( channel )
           , _glWidgetPtr( new EqGLWidget( channel ))
           , _frameInfo( _frustum, INVALID_FRAME )
-    {}
-
-    void initializeFrame()
     {
-        _channel->setNearFar( nearPlane, farPlane );
-
-        eq::FrameDataPtr frameData = new eq::FrameData();
-        frameData->setBuffers( eq::Frame::BUFFER_COLOR );
-        _frame.setFrameData( frameData );
-        _frame.setName( std::string( "self." ) + _channel->getName( ));
+        channel->setNearFar( nearPlane, farPlane );
+        _image.setAlphaUsage( true );
+        _image.setInternalFormat( eq::Frame::BUFFER_COLOR,
+                                  EQ_COMPRESSOR_DATATYPE_RGBA );
     }
 
     ConstFrameDataPtr getFrameData() const
@@ -256,7 +251,7 @@ public:
             nodeIds.push_back( lodNode.getNodeId( ));
         }
 
-        if( _drawRange == eq::Range::ALL )
+        if( _channel->getRange() == eq::Range::ALL )
         {
             renderSets.push_back( renderBricks );
             return;
@@ -349,13 +344,13 @@ public:
 
         const float worldSpacePerVoxel = volInfo.worldSpacePerVoxel;
         const uint32_t volumeDepth = volInfo.rootNode.getDepth();
-        _drawRange = _channel->getRange();
+        const eq::Range& range = _channel->getRange();
 
         SelectVisibles visitor( dashTree, _frustum,
                                 _channel->getPixelViewport().h,
                                 screenSpaceError, worldSpacePerVoxel,
                                 volumeDepth, minLOD, maxLOD,
-                                Range{{ _drawRange.start, _drawRange.end }});
+                                Range{{ range.start, range.end }});
 
         livre::DFSTraversal traverser;
         traverser.traverse( volInfo.rootNode, visitor,
@@ -475,6 +470,7 @@ public:
         renderView->render( _frameInfo, bricks, *_glWidgetPtr );
         updateRegions( bricks );
         _renderSets.pop_back();
+        _image.setContext( _channel->getContext( ));
     }
 
     void applyCamera()
@@ -486,7 +482,6 @@ public:
 
     void configInit()
     {
-        initializeFrame();
         initializeRenderer();
 
         Window* window = static_cast< Window* >( _channel->getWindow( ));
@@ -496,7 +491,7 @@ public:
     void configExit()
     {
         _frameInfo.renderNodes.clear();
-        _frame.getFrameData()->flush();
+        _image.resetPlugins();
         _renderViewPtr.reset();
     }
 
@@ -611,99 +606,99 @@ public:
     void frameAssemble( const eq::Frames& frames )
     {
         eq::PixelViewport coveredPVP;
-        eq::Frames dbFrames;
+        eq::ImageOps dbOps;
 
         // Make sure all frames are ready and gather some information on them
-        prepareFramesAndSetPvp( frames, dbFrames, coveredPVP );
+        prepareFramesAndSetPvp( frames, dbOps, coveredPVP );
         coveredPVP.intersect( _channel->getPixelViewport( ));
 
-        if( dbFrames.empty() || !coveredPVP.hasArea( ))
+        if( dbOps.empty() || !coveredPVP.hasArea( ))
             return;
 
         if( useDBSelfAssemble( )) // add self to determine ordering
         {
-            eq::FrameDataPtr data = _frame.getFrameData();
-            _frame.clear( );
-            _frame.setOffset( eq::Vector2i( 0, 0 ));
-            data->getContext().range = _drawRange;
-            data->setPixelViewport( coveredPVP );
-            dbFrames.push_back( &_frame );
+            eq::ImageOp op;
+            op.image = &_image;
+            op.buffers = eq::Frame::BUFFER_COLOR;
+            op.offset = eq::Vector2i( coveredPVP.x, coveredPVP.y );
+            dbOps.emplace_back( op );
         }
 
-        orderFrames( dbFrames, computeModelView( ));
+        orderImages( dbOps, computeModelView( ));
 
         if( useDBSelfAssemble( )) // read back self frame
         {
-            if( dbFrames.front() == &_frame ) // OPT: first in framebuffer!
-                dbFrames.erase( dbFrames.begin( ));
-            else
+            if( dbOps.front().image == &_image ) // OPT: first in framebuffer!
+                dbOps.erase( dbOps.begin( ));
+            else if( coveredPVP.hasArea())
             {
-                const eq::Images& images =
-                    _frame.startReadback( _channel->getObjectManager(),
-                                          _channel->getDrawableConfig(),
-                                          _channel->getRegions(),
-                                          _channel->getContext( ));
-                clearViewport( coveredPVP );
-                for( eq::Image* image : images )
-                    image->finishReadback( _channel->glewGetContext( ));
+                eq::util::ObjectManager& glObjects = _channel->getObjectManager();
+                eq::PixelViewport pvp = _channel->getRegion();
+                pvp.intersect( coveredPVP );
 
-                // offset for assembly
-                _frame.setOffset( eq::Vector2i( coveredPVP.x, coveredPVP.y ));
+                // Update range
+                eq::Range range( 1.f, 0.f );
+                for( const eq::ImageOp& op : dbOps )
+                {
+                    const eq::Range& r = op.image->getContext().range;
+                    range.start = std::min( range.start, r.start );
+                    range.end = std::max( range.end, r.end );
+                }
+                eq::RenderContext context = _image.getContext();
+                context.range = range;
+
+                if( _image.startReadback( eq::Frame::BUFFER_COLOR, pvp, context,
+                                          eq::Zoom(), glObjects ))
+                {
+                    _image.finishReadback( _channel->glewGetContext( ));
+                }
             }
         }
 
-        try // blend DB frames in computed order
-        {
-            eq::Compositor::blendFrames( dbFrames, _channel, 0 );
-        }
-        catch( const std::exception& e )
-        {
-            LBWARN << e.what() << std::endl;
-        }
-
-        // Update draw range
-        for( size_t i = 0; i < dbFrames.size(); ++i )
-            _drawRange.merge( dbFrames[i]->getFrameData()->getContext().range );
+        glEnable( GL_BLEND );
+        glBlendFunc( GL_ONE, GL_SRC_ALPHA );
+        eq::Compositor::blendImages( dbOps, _channel, nullptr );
     }
 
-    bool useDBSelfAssemble() const { return _drawRange != eq::Range::ALL; }
-
-    static bool cmpRangesInc(const eq::Frame* a, const eq::Frame* b )
-    {
-        return a->getFrameData()->getContext().range.start >
-               b->getFrameData()->getContext().range.start;
-    }
+    bool useDBSelfAssemble() const
+        { return _image.getContext().range != eq::Range::ALL; }
 
     void prepareFramesAndSetPvp( const eq::Frames& frames,
-                                 eq::Frames& dbFrames,
+                                 eq::ImageOps& dbImages,
                                  eq::PixelViewport& coveredPVP )
     {
         for( eq::Frame* frame : frames )
         {
             {
-                eq::ChannelStatistics event(
+                eq::ChannelStatistics stat(
                     eq::Statistic::CHANNEL_FRAME_WAIT_READY, _channel );
-                frame->waitReady( );
+                frame->waitReady();
             }
-
-            const eq::Range& range = frame->getFrameData()->getContext().range;
-            if( range == eq::Range::ALL ) // 2D frame, assemble directly
+            for( eq::Image* image : frame->getImages( ))
             {
-                eq::Compositor::assembleFrame( frame, _channel );
-                continue;
-            }
 
-            dbFrames.push_back( frame );
-            for( const eq::Image* image : frame->getImages( ))
-            {
-                const eq::PixelViewport imagePVP = image->getPixelViewport() +
-                                                   frame->getOffset();
-                coveredPVP.merge( imagePVP );
+                eq::ImageOp op( frame, image );
+                op.offset = frame->getOffset();
+                const eq::Range& range = image->getContext().range;
+                if( range == eq::Range::ALL ) // 2D frame, assemble directly
+                    eq::Compositor::assembleImage( op, _channel );
+                else
+                {
+                    dbImages.emplace_back( op );
+                    coveredPVP.merge( image->getPixelViewport() +
+                                      frame->getOffset( ));
+                }
             }
         }
     }
 
-    void orderFrames( eq::Frames& frames, const Matrix4f& modelView )
+    static bool cmpRangesInc( const eq::ImageOp& a, const eq::ImageOp& b )
+    {
+        return a.image->getContext().range.start >
+               b.image->getContext().range.start;
+    }
+
+    void orderImages( eq::ImageOps& ops, const Matrix4f& modelView )
     {
         LBASSERT( !_channel->useOrtho( ));
 
@@ -715,16 +710,15 @@ public:
 
         Vector3f norm = modelviewITM * Vector3f( 0.0f, 0.0f, 1.0f );
         norm.normalize();
-        std::sort( frames.begin(), frames.end(), cmpRangesInc );
+        std::sort( ops.begin(), ops.end(), cmpRangesInc );
 
         // cos of angle between normal and vectors from center
         std::vector<double> dotVals;
 
         // of projection to the middle of slices' boundaries
-        for( const eq::Frame* frame : frames )
+        for( const eq::ImageOp& op : ops )
         {
-            const double px = -1.0 +
-                            frame->getFrameData()->getContext().range.end * 2.0;
+            const double px = -1.0 + op.image->getContext().range.end * 2.0;
             const Vector4f pS = modelView * Vector4f( 0.0f, 0.0f, px, 1.0f );
             Vector3f pSsub( pS[ 0 ], pS[ 1 ], pS[ 2 ] );
             pSsub.normalize();
@@ -742,25 +736,24 @@ public:
             if( dotVals[i] > 0 && dotVals[i+1] > 0 )
                 minPos = static_cast< int >( i );
 
-        const size_t nFrames = frames.size();
+        const size_t nOps = ops.size();
         minPos++;
-        if( minPos < frames.size()-1 )
+        if( minPos < ops.size()-1 )
         {
-            eq::Frames framesTmp = frames;
+            eq::ImageOps opsTmp = ops;
 
             // copy slices that should be rendered first
-            memcpy( &frames[ nFrames-minPos-1 ], &framesTmp[0],
-                    (minPos+1)*sizeof( eq::Frame* ) );
+            memcpy( &ops[ nOps-minPos-1 ], &opsTmp[0],
+                    (minPos+1) * sizeof( eq::ImageOp ) );
 
             // copy slices that should be rendered last, in reverse order
-            for( size_t i=0; i<nFrames-minPos-1; i++ )
-                frames[ i ] = framesTmp[ nFrames-i-1 ];
+            for( size_t i=0; i<nOps-minPos-1; i++ )
+                ops[ i ] = opsTmp[ nOps-i-1 ];
         }
     }
 
     livre::Channel* const _channel;
-    eq::Range _drawRange;
-    eq::Frame _frame;
+    eq::Image _image;
     Frustum _frustum;
     ViewPtr _renderViewPtr;
     GLWidgetPtr _glWidgetPtr;
@@ -811,7 +804,7 @@ bool Channel::configExit()
 void Channel::frameStart( const eq::uint128_t& frameID,
                           const uint32_t frameNumber )
 {
-    _impl->_drawRange = eq::Range::ALL;
+    _impl->_image.reset();
     eq::Channel::frameStart( frameID, frameNumber );
 }
 
