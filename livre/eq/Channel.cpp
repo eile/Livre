@@ -270,10 +270,9 @@ public:
             return;
         }
 
-        BOOST_FOREACH( const ConstCacheObjectPtr& cacheObject, renderNodes )
+        for( const ConstCacheObjectPtr& cacheObject: renderNodes )
         {
-            livre::NodeId nodeId =
-                    boost::static_pointer_cast< const TextureObject >( cacheObject )->getLODNode()->getNodeId();
+            const livre::NodeId nodeId( cacheObject->getId( ));
             const uint32_t factor = 1 << ( maxLevel - nodeId.getLevel());
             const Vector3ui position = factor * nodeId.getPosition();
             const Boxui nodeBox( position, position + Vector3ui( factor ));
@@ -291,17 +290,17 @@ public:
             {
                 ConvexSet& set = it->second;
                 Vector3ui mergePoint = set.box.getMin();
-                mergePoint[axis] = set.box.getDimension()[axis];
+                mergePoint[axis] = set.box.getSize()[axis];
 
                 LBDEBUG << "- Testing render set < " << set.box << " > at " << mergePoint << std::endl;
                 if( setMap.find( mergePoint) != setMap.end())
                 {
                     const ConvexSet& candidate = setMap[mergePoint];
                     LBDEBUG << "-- Candidate render set to be merged < " << candidate.box << std::endl;
-                    if( set.box.getDimension()[( axis + 1 ) % 3] ==
-                            candidate.box.getDimension()[( axis + 1 ) % 3] &&
-                        set.box.getDimension()[( axis + 2 ) % 3] ==
-                            candidate.box.getDimension()[( axis + 2 ) % 3] )
+                    if( set.box.getSize()[( axis + 1 ) % 3] ==
+                        candidate.box.getSize()[( axis + 1 ) % 3] &&
+                        set.box.getSize()[( axis + 2 ) % 3] ==
+                        candidate.box.getSize()[( axis + 2 ) % 3] )
                     {
                         LBDEBUG << "---     MERGED!!!" << std::endl;
                         set.merge( candidate );
@@ -567,7 +566,7 @@ public:
         ConstVolumeDataSourcePtr dataSource = static_cast< livre::Node* >(
             _channel->getNode( ))->getDashTree()->getDataSource();
         const VolumeInformation& info = dataSource->getVolumeInformation();
-        Vector3f voxelSize = info.boundingBox.getDimension() / info.voxels;
+        Vector3f voxelSize = info.boundingBox.getSize() / info.voxels;
         std::string unit = "m";
         if( voxelSize.x() < 0.000001f )
         {
@@ -832,7 +831,7 @@ bool Channel::frameRender( const eq::RenderContext& context,
     _impl->frameRender();
 
     bool hasAsyncReadback = false;
-    while( !_impl->renderSets.empty( ))
+    while( !_impl->_renderSets.empty( ))
         if( eq::Channel::frameRender( context, frames ))
             hasAsyncReadback = true;
     return hasAsyncReadback;
