@@ -656,8 +656,11 @@ public:
         }
 
         glEnable( GL_BLEND );
-        glBlendFunc( GL_ONE, GL_SRC_ALPHA );
-        eq::Compositor::blendImages( dbOps, _channel, nullptr );
+        glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+
+        // Bypass eq CPU compositor until it has configurable blending:
+        for( const eq::ImageOp& op : dbOps )
+            eq::Compositor::assembleImage( op, _channel );
     }
 
     bool useDBSelfAssemble() const
