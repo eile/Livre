@@ -383,6 +383,8 @@ public:
                               std::numeric_limits< float >::max(),
                              -std::numeric_limits< float >::max(),
                              -std::numeric_limits< float >::max( ));
+            Vector2f range( std::numeric_limits< float >::max( ),
+                            -std::numeric_limits< float >::max( ));
 
             for( size_t i = 0; i < 8; ++i )
             {
@@ -391,6 +393,8 @@ public:
                 region[1] = std::min( corner[1], region[1] );
                 region[2] = std::max( corner[0], region[2] );
                 region[3] = std::max( corner[1], region[3] );
+                range[0] = std::min( corner[2], range[0] );
+                range[1] = std::max( corner[2], range[1] );
             }
 
             // transform ROI from [ -1 -1 1 1 ] to normalized viewport
@@ -398,8 +402,12 @@ public:
                                        region[1] * .5f + .5f,
                                        ( region[2] - region[0] ) * .5f,
                                        ( region[3] - region[1] ) * .5f );
+            // transform range to [-1 1 ] to normalized [ 0, 1] range
+            eq::Range normalizedRange ( std::max( 0.f, range[0] * .5f + .5f),
+                                        std::min(1.f, range[1] * .5f + .5f ));
 
             _channel->declareRegion( eq::Viewport( normalized ));
+            _range = normalizedRange;
         }
 #ifndef NDEBUG
         _channel->outlineViewport();
@@ -470,7 +478,9 @@ public:
         renderView->render( _frameInfo, bricks, *_glWidgetPtr );
         updateRegions( bricks );
         _renderSets.pop_back();
-        _image.setContext( _channel->getContext( ));
+        eq::RenderContext context = _channel->getContext( );
+        context.range = _range;
+        _image.setContext( context );
     }
 
     void applyCamera()
@@ -603,6 +613,12 @@ public:
             frame->disableBuffer( eq::Frame::BUFFER_DEPTH );
     }
 
+    void setReadbackContext( eq::RenderContext& context )
+    {
+        // Set the range of the rendered images as the Z - range in the view space
+        context.range = _range;
+    }
+
     void frameAssemble( const eq::Frames& frames )
     {
         eq::PixelViewport coveredPVP;
@@ -701,62 +717,15 @@ public:
                b.image->getContext().range.start;
     }
 
-    void orderImages( eq::ImageOps& ops, const Matrix4f& modelView )
+    void orderImages( eq::ImageOps& ops, const Matrix4f& modelView LB_UNUSED )
     {
         LBASSERT( !_channel->useOrtho( ));
-
-        // calculate modelview inversed+transposed matrix
-        Matrix3f modelviewITM;
-        Matrix4f modelviewIM;
-        modelView.inverse( modelviewIM );
-        Matrix3f( modelviewIM ).transpose_to( modelviewITM );
-
-        Vector3f norm = modelviewITM * Vector3f( 0.0f, 0.0f, 1.0f );
-        norm.normalize();
         std::sort( ops.begin(), ops.end(), cmpRangesInc );
-
-        // cos of angle between normal and vectors from center
-        std::vector<double> dotVals;
-
-        // of projection to the middle of slices' boundaries
-        for( const eq::ImageOp& op : ops )
-        {
-            const double px = -1.0 + op.image->getContext().range.end * 2.0;
-            const Vector4f pS = modelView * Vector4f( 0.0f, 0.0f, px, 1.0f );
-            Vector3f pSsub( pS[ 0 ], pS[ 1 ], pS[ 2 ] );
-            pSsub.normalize();
-            dotVals.push_back( norm.dot( pSsub ));
-        }
-
-        const Vector4f pS = modelView * Vector4f( 0.0f, 0.0f, -1.0f, 1.0f );
-        eq::Vector3f pSsub( pS[ 0 ], pS[ 1 ], pS[ 2 ] );
-        pSsub.normalize();
-        dotVals.push_back( norm.dot( pSsub ));
-
-        // check if any slices need to be rendered in reverse order
-        size_t minPos = std::numeric_limits< size_t >::max();
-        for( size_t i=0; i<dotVals.size()-1; i++ )
-            if( dotVals[i] > 0 && dotVals[i+1] > 0 )
-                minPos = static_cast< int >( i );
-
-        const size_t nOps = ops.size();
-        minPos++;
-        if( minPos < ops.size()-1 )
-        {
-            eq::ImageOps opsTmp = ops;
-
-            // copy slices that should be rendered first
-            memcpy( &ops[ nOps-minPos-1 ], &opsTmp[0],
-                    (minPos+1) * sizeof( eq::ImageOp ) );
-
-            // copy slices that should be rendered last, in reverse order
-            for( size_t i=0; i<nOps-minPos-1; i++ )
-                ops[ i ] = opsTmp[ nOps-i-1 ];
-        }
     }
 
     livre::Channel* const _channel;
     eq::Image _image;
+    eq::Range _range;
     Frustum _frustum;
     ViewPtr _renderViewPtr;
     GLWidgetPtr _glWidgetPtr;
@@ -864,6 +833,8 @@ void Channel::frameReadback( const eq::uint128_t& frameId,
                              const eq::Frames& frames )
 {
     _impl->frameReadback( frames );
+    eq::RenderContext context = getContext( );
+    _impl->setReadbackContext( context );
     eq::Channel::frameReadback( frameId, frames );
 }
 
