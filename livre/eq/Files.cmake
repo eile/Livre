@@ -26,6 +26,7 @@ set(LIVREEQ_HEADERS
   )
 
 set(LIVREEQ_SOURCES
+  cameraAnimation.cpp
   Channel.cpp
   Client.cpp
   Config.cpp

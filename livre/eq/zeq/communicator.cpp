@@ -191,26 +191,13 @@ public:
     }
 
     // Generic camera (from REST) in meters
-    void onCamera( const ::zeq::Event& event )
+    void onCamera( const ::zeq::Event& )
     {
-        const auto& matrix = ::zeq::hbp::deserializeCamera( event );
-        Matrix4f modelViewMatrix;
-        modelViewMatrix.set( matrix.begin(), matrix.end(), false );
-        auto& cameraSettings = _getFrameData().getCameraSettings();
-        cameraSettings.setModelViewMatrix( modelViewMatrix );
     }
 
     // HBP 'micron' camera from other brain applications
-    void onHBPCamera( const ::zeq::Event& event )
+    void onHBPCamera( const ::zeq::Event& )
     {
-        const auto& matrix = ::zeq::hbp::deserializeCamera( event );
-        Matrix4f modelViewMatrixMicron;
-        modelViewMatrixMicron.set( matrix.begin(), matrix.end(), false );
-
-        const auto& modelViewMatrix =
-                _config.convertFromHBPCamera( modelViewMatrixMicron );
-        auto& cameraSettings = _getFrameData().getCameraSettings();
-        cameraSettings.setModelViewMatrix( modelViewMatrix );
     }
 
     void onLookupTable1D( const ::zeq::Event& event )

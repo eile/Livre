@@ -60,6 +60,7 @@ void CameraSettings::spinModel( const float x, const float y, const float z )
 void CameraSettings::moveCamera( const float x, const float y, const float z )
 {
     cameraPosition_ += Vector3f( x, y, z );
+    cameraLookAt_ += Vector3f( x, y, z );
     setDirty( DIRTY_ALL );
 }
 
@@ -71,6 +72,7 @@ void CameraSettings::setCameraPosition( const Vector3f& position )
 
 void CameraSettings::setCameraLookAt( const Vector3f& lookAt )
 {
+    cameraLookAt_ = lookAt;
     setModelViewMatrix( maths::computeModelViewMatrix( cameraPosition_, lookAt ));
 }
 

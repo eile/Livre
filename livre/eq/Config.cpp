@@ -20,6 +20,7 @@
 
 #include <livre/eq/Config.h>
 
+#include <livre/eq/cameraAnimation.h>
 #include <livre/eq/Client.h>
 #include <livre/eq/Event.h>
 #include <livre/eq/events/EqEventHandlerFactory.h>
@@ -56,7 +57,9 @@ public:
         , volumeBBox( Boxf::makeUnitBox( ))
         , redraw( true )
         , dataFrameRange( INVALID_FRAME_RANGE )
-    {}
+    {
+        animation.loadAnimation( "camera.txt" );
+    }
 
     void publishModelView()
     {
@@ -108,6 +111,7 @@ public:
 #endif
     bool redraw;
     Vector2ui dataFrameRange;
+    CameraAnimation animation;
 };
 
 Config::Config( eq::ServerPtr parent )
@@ -204,6 +208,14 @@ bool Config::init( const int argc LB_UNUSED, char** argv LB_UNUSED )
 
 bool Config::frame()
 {
+    if( _impl->animation.isValid( ))
+    {
+        const CameraAnimation::Step& curStep = _impl->animation.getNextStep();
+        CameraSettings& camera = _impl->framedata.getCameraSettings();
+        camera.setCameraPosition( curStep.origin );
+        camera.setCameraLookAt( curStep.lookat );
+    }
+
     if( _impl->dataFrameRange == INVALID_FRAME_RANGE )
         return false;
 
@@ -251,7 +263,8 @@ uint32_t Config::getDataFrameCount() const
 
 bool Config::needRedraw()
 {
-    return _impl->redraw || getApplicationParameters().animation != 0;
+    return _impl->redraw || getApplicationParameters().animation != 0 ||
+           _impl->animation.isValid();
 }
 
 bool Config::exit()
