@@ -29,7 +29,7 @@
 #ifndef LIVRE_CAMERAANIMATION_H
 #define LIVRE_CAMERAANIMATION_H
 
-#include <livre/Eq/types.h>
+#include <livre/eq/types.h>
 #include <vmmlib/vector.hpp>
 
 namespace livre
