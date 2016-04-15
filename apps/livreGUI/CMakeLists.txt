@@ -1,4 +1,4 @@
-# Copyright (c) 2011-2015, EPFL/Blue Brain Project
+# Copyright (c) 2011-2016, EPFL/Blue Brain Project
 #                          David Steiner <steiner@ifi.uzh.ch>
 #                          Ahmet Bilgili <ahmet.bilgili@epfl.ch>
 #                          Marwan Abdellah <marwan.abdellah@epfl.ch>
@@ -21,6 +21,7 @@ set(LIVREGUI_HEADERS
   Controller.h
   MainWindow.h
   animationController/AnimationController.h
+  progress/Progress.h
   renderParametersController/RenderParametersController.h
   transferFunctionEditor/ColorMapWidget.h
   transferFunctionEditor/HoverPoints.h
@@ -36,6 +37,8 @@ set(LIVREGUI_SOURCES
   animationController/AnimationController.cpp
   animationController/AnimationController.ui
   livreGUI.cpp
+  progress/Progress.cpp
+  progress/Progress.ui
   renderParametersController/RenderParametersController.cpp
   renderParametersController/RenderParametersController.ui
   resources/resources.qrc
@@ -45,7 +48,8 @@ set(LIVREGUI_SOURCES
   transferFunctionEditor/TransferFunctionEditor.cpp
   transferFunctionEditor/TransferFunctionEditor.ui)
 
-set(LIVREGUI_LINK_LIBRARIES LivreCore LivreLib Qt5::Widgets ZeroEQ ZeroEQHBP ZeroBuf)
+set(LIVREGUI_LINK_LIBRARIES LivreCore LivreLib Qt5::Widgets ZeroEQ ZeroEQHBP
+  ZeroBuf ZeroBufData)
 
 if(MONSTEER_FOUND)
   list(APPEND LIVREGUI_LINK_LIBRARIES MonsteerQt)
