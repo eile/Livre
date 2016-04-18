@@ -53,7 +53,9 @@
 #include <livre/core/render/Frustum.h>
 #include <livre/core/render/RenderBrick.h>
 
-#include <zeq/publisher.h>
+#ifdef LIVRE_USE_ZEROEQ
+#  include <zeroeq/publisher.h>
+#endif
 #include <zerobuf/data/progress.h>
 #include <eq/eq.h>
 #include <eq/gl.h>
@@ -358,7 +360,7 @@ public:
             drawCacheStatistics();
         }
 
-#ifdef LIVRE_USE_ZEQ
+#ifdef LIVRE_USE_ZEROEQ
         const size_t all = _frameInfo.allNodes.size();
         if( all > 0 )
         {
@@ -602,8 +604,8 @@ public:
     FrameInfo _frameInfo;
     std::unique_ptr< RayCastRenderer > _renderer;
     ::zerobuf::data::Progress _progress;
-#ifdef LIVRE_USE_ZEQ
-    zeq::Publisher _publisher;
+#ifdef LIVRE_USE_ZEROEQ
+    zeroeq::Publisher _publisher;
 #endif
 };
 

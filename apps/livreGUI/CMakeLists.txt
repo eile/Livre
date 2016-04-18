@@ -26,7 +26,7 @@ set(LIVREGUI_HEADERS
   transferFunctionEditor/ColorMapWidget.h
   transferFunctionEditor/HoverPoints.h
   transferFunctionEditor/TFWidget.h
-  transferFunctionEditor/TransferFunctionEditor.h)
+  transferFunctionEditor/TransferFunctionEditor.h
   transferFunctionEditor/Utilities.h
   types.h)
 
