@@ -9,11 +9,10 @@ set(LIVRECORE_PUBLIC_HEADERS
   data/LODNode.h
   data/NodeId.h
   data/MemoryUnit.h
-  data/VolumeDataSourcePlugin.h
+  data/DataSourcePlugin.h
   data/VolumeInformation.h
   render/GLContext.h
   render/GLSLShaders.h
-  render/LODEvaluator.h
   util/Utilities.h
   lunchboxTypes.h
   mathTypes.h
@@ -31,7 +30,7 @@ set(LIVRECORE_HEADERS
   dash/DashRenderNode.h
   dash/DashRenderStatus.h
   dash/DashTree.h
-  data/VolumeDataSource.h
+  data/DataSource.h
   dashpipeline/DashConnection.h
   dashpipeline/DashProcessor.h
   dashpipeline/DashProcessorInput.h
@@ -48,14 +47,11 @@ set(LIVRECORE_HEADERS
   pipeline/ProcessorOutput.h
   render/FrameInfo.h
   render/Frustum.h
-  render/GLContextTrait.h
-  render/GLWidget.h
   render/RenderBrick.h
   render/Renderer.h
   render/TexturePool.h
   render/TextureState.h
   render/TransferFunction1D.h
-  render/View.h
   util/FrameUtils.h
   util/ThreadClock.h
   visitor/NodeVisitor.h
@@ -75,8 +71,8 @@ set(LIVRECORE_SOURCES
   data/LODNode.cpp
   data/MemoryUnit.cpp
   data/NodeId.cpp
-  data/VolumeDataSource.cpp
-  data/VolumeDataSourcePlugin.cpp
+  data/DataSource.cpp
+  data/DataSourcePlugin.cpp
   data/VolumeInformation.cpp
   dashpipeline/DashConnection.cpp
   dashpipeline/DashProcessor.cpp
@@ -91,14 +87,11 @@ set(LIVRECORE_SOURCES
   render/Frustum.cpp
   render/GLContext.cpp
   render/GLSLShaders.cpp
-  render/GLContextTrait.cpp
-  render/GLWidget.cpp
   render/RenderBrick.cpp
   render/Renderer.cpp
   render/TexturePool.cpp
   render/TextureState.cpp
   render/TransferFunction1D.cpp
-  render/View.cpp
   util/FrameUtils.cpp
   util/ThreadClock.cpp
   util/Utilities.cpp
@@ -113,7 +106,6 @@ set(LIVRECORE_INCLUDE_NAME livre/core)
 set(LIVRECORE_NAMESPACE livrecore)
 common_library(LivreCore)
 
-if(CMAKE_COMPILER_IS_GNUCXX_PURE)
-  set_target_properties(LivreCore PROPERTIES LINK_FLAGS "-Wl,--no-undefined")
-  add_definitions(-DGL3_PROTOTYPES)
+if(CMAKE_COMPILER_IS_GCC)
+  target_compile_definitions(LivreCore PRIVATE GL3_PROTOTYPES=1)
 endif()

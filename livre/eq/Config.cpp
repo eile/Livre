@@ -38,8 +38,8 @@
 #include <livre/core/maths/maths.h>
 #include <livre/core/util/FrameUtils.h>
 
-#ifdef LIVRE_USE_ZEQ
-#  include <livre/eq/zeq/communicator.h>
+#ifdef LIVRE_USE_ZEROEQ
+#  include <livre/eq/zeroeq/communicator.h>
 #endif
 
 #include <eq/eq.h>
@@ -63,7 +63,7 @@ public:
 
     void publishModelView()
     {
-#ifdef LIVRE_USE_ZEQ
+#ifdef LIVRE_USE_ZEROEQ
         const CameraSettings& cameraSettings = framedata.getCameraSettings();
         Matrix4f modelView = cameraSettings.getModelViewMatrix();
 
@@ -106,8 +106,8 @@ public:
     EventMapper eventMapper;
     FrameData framedata;
     Boxf volumeBBox;
-#ifdef LIVRE_USE_ZEQ
-    std::unique_ptr< zeq::Communicator > communicator;
+#ifdef LIVRE_USE_ZEROEQ
+    std::unique_ptr< zeroeq::Communicator > communicator;
 #endif
     bool redraw;
     Vector2ui dataFrameRange;
@@ -168,8 +168,8 @@ void Config::resetCamera()
 
 bool Config::init( const int argc LB_UNUSED, char** argv LB_UNUSED )
 {
-#ifdef LIVRE_USE_ZEQ
-    _impl->communicator.reset( new zeq::Communicator( *this, argc, argv ));
+#ifdef LIVRE_USE_ZEROEQ
+    _impl->communicator.reset( new zeroeq::Communicator( *this, argc, argv ));
 #endif
 
     resetCamera();
@@ -246,7 +246,7 @@ bool Config::frame()
                                                           params.animation ));
     _impl->redraw = false;
 
-#ifdef LIVRE_USE_ZEQ
+#ifdef LIVRE_USE_ZEROEQ
     _impl->communicator->publishFrame();
 #endif
 
@@ -273,7 +273,7 @@ bool Config::exit()
     _impl->framedata.deregisterObjects();
     if( !_deregisterFrameData() )
         ret = false;
-#ifdef LIVRE_USE_ZEQ
+#ifdef LIVRE_USE_ZEROEQ
     _impl->communicator->publishExit();
 #endif
 
@@ -379,7 +379,7 @@ bool Config::switchToViewCanvas( const eq::uint128_t& viewID )
 void Config::handleEvents()
 {
     eq::Config::handleEvents();
-#ifdef LIVRE_USE_ZEQ
+#ifdef LIVRE_USE_ZEROEQ
     _impl->communicator->handleEvents();
     _impl->communicator->publishHeartbeat();
 #endif
@@ -392,7 +392,7 @@ Matrix4f Config::convertFromHBPCamera( const Matrix4f& modelViewMatrix ) const
 
 bool Config::handleEvent( const eq::ConfigEvent* event )
 {
-#ifdef LIVRE_USE_ZEQ
+#ifdef LIVRE_USE_ZEROEQ
     const CameraSettings& cameraSettings = _impl->framedata.getCameraSettings();
     const Matrix4f& oldModelViewMatrix = cameraSettings.getModelViewMatrix();
 #endif
@@ -423,7 +423,7 @@ bool Config::handleEvent( const eq::ConfigEvent* event )
 
     if( hasEvent )
     {
-#ifdef LIVRE_USE_ZEQ
+#ifdef LIVRE_USE_ZEROEQ
         if( cameraSettings.getModelViewMatrix() != oldModelViewMatrix )
             _impl->publishModelView();
 #endif
@@ -443,7 +443,7 @@ bool Config::handleEvent( eq::EventICommand command )
         _impl->volumeBBox = command.read< Boxf >();
         return false;
 
-#ifdef LIVRE_USE_ZEQ
+#ifdef LIVRE_USE_ZEROEQ
     case GRAB_IMAGE:
     {
         const uint64_t dataSize = command.read< uint64_t >();

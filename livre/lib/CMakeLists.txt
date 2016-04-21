@@ -9,7 +9,7 @@ list(APPEND CPPCHECK_EXTRA_ARGS
 
 include(zerobufGenerateCxx)
 zerobuf_generate_cxx(ZEROBUF_GENERATED
-  ${OUTPUT_INCLUDE_DIR}/livre/lib/zerobuf zeq/volumeRendererParameters.fbs)
+  ${PROJECT_BINARY_DIR}/include/livre/lib/zerobuf zeroeq/volumeRendererParameters.fbs)
 
 set(LIVRELIB_PUBLIC_HEADERS
   ${ZEROBUF_GENERATED_HEADERS}
@@ -23,8 +23,6 @@ set(LIVRELIB_PUBLIC_HEADERS
   configuration/ApplicationParameters.h
   configuration/VolumeRendererParameters.h
   render/AvailableSetGenerator.h
-  render/ScreenSpaceLODEvaluator.h
-  render/RenderView.h
   uploaders/DataUploadProcessor.h
   uploaders/TextureUploadProcessor.h
   visitor/CollectionTraversal.h
@@ -44,8 +42,6 @@ set(LIVRELIB_SOURCES
   configuration/ApplicationParameters.cpp
   configuration/VolumeRendererParameters.cpp
   render/AvailableSetGenerator.cpp
-  render/ScreenSpaceLODEvaluator.cpp
-  render/RenderView.cpp
   uploaders/DataUploadProcessor.cpp
   uploaders/TextureUploadProcessor.cpp
   visitor/CollectionTraversal.cpp
@@ -54,19 +50,5 @@ set(LIVRELIB_SOURCES
 set(LIVRELIB_LINK_LIBRARIES PUBLIC LivreCore ZeroBuf
                             PRIVATE Equalizer ${VTUNE_LIBRARIES})
 
-if(LIVRE_USE_REMOTE_DATASOURCE)
-  flatbuffers_generate_c_headers(FBS
-    zeq/lodNode.fbs
-    zeq/memory.fbs
-    zeq/uri.fbs
-    zeq/volumeInformation.fbs)
-  list(APPEND LIVRELIB_HEADERS zeq/events.h)
-  list(APPEND LIVRELIB_SOURCES zeq/events.cpp ${FBS_OUTPUTS})
-  list(APPEND LIVRELIB_LINK_LIBRARIES PUBLIC zeq)
-endif()
-
 set(LIVRELIB_INCLUDE_NAME livre/lib)
 common_library(LivreLib)
-if(CMAKE_COMPILER_IS_GNUCXX_PURE)
-  set_target_properties(LivreLib PROPERTIES LINK_FLAGS "-Wl,--no-undefined")
-endif()

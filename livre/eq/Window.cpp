@@ -55,11 +55,10 @@ public:
     EqTextureUploadProcessor( Config& config,
                               DashTree& dashTree,
                               GLContextPtr shareContext,
-                              GLContextPtr context,
                               TextureDataCache& dataCache,
                               const VolumeRendererParameters& parameters )
         : TextureUploadProcessor( dashTree, shareContext,
-                                  context, dataCache, parameters )
+                                  dataCache, parameters )
         , _config( config )
     {}
 
@@ -86,8 +85,7 @@ public:
 
     void configInitGL()
     {
-        _windowContext.reset( new EqContext( _window ));
-        GLContext::glewSetContext( _window->glewGetContext( ));
+        _glContext.reset( new EqContext( _window ));
     }
 
     void configInit()
@@ -174,7 +172,7 @@ public:
         // share upload processors for windows which also share the GL context
         if( sharedWindow && sharedWindow != _window )
         {
-            _windowContext = sharedWindow->_impl->_windowContext;
+            _glContext = sharedWindow->_impl->_glContext;
             _dashProcessor = sharedWindow->_impl->_dashProcessor;
             _textureUploader = sharedWindow->_impl->_textureUploader;
             _dataUploader = sharedWindow->_impl->_dataUploader;
@@ -185,19 +183,14 @@ public:
         Node* node = static_cast< Node* >( _window->getNode( ));
         DashTree& dashTree = node->getDashTree();
         _dashProcessor->setDashContext( dashTree.createContext( ));
+        _dataUploader.reset( new DataUploadProcessor( dashTree, _glContext,
+                                                      node->getTextureDataCache( )));
 
-        GLContextPtr dataUploadContext( new EqContext( _window ));
-        _dataUploader.reset( new DataUploadProcessor( dashTree, _windowContext,
-                                                      dataUploadContext,
-                                                 node->getTextureDataCache( )));
-
-        GLContextPtr textureUploadContext( new EqContext( _window ));
         Config* config = static_cast< Config* >( _window->getConfig( ));
         Pipe* pipe = static_cast< Pipe* >( _window->getPipe( ));
 
         _textureUploader.reset(
-            new EqTextureUploadProcessor( *config, dashTree, _windowContext,
-                                          textureUploadContext,
+            new EqTextureUploadProcessor( *config, dashTree, _glContext,
                                           node->getTextureDataCache(),
                                           pipe->getFrameData()->getVRParameters( )));
     }
@@ -227,10 +220,15 @@ public:
     }
 
     Window* const _window;
+
+    typedef std::shared_ptr< TextureUploadProcessor > TextureUploadProcessorPtr;
     TextureUploadProcessorPtr _textureUploader;
+
+    typedef std::shared_ptr< DataUploadProcessor > DataUploadProcessorPtr;
     DataUploadProcessorPtr _dataUploader;
+
     DashProcessorPtr _dashProcessor;
-    GLContextPtr _windowContext;
+    GLContextPtr _glContext;
 };
 
 Window::Window( eq::Pipe *parent )

@@ -18,7 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include <livre/core/data/VolumeDataSource.h>
+#include <livre/core/data/DataSource.h>
 #include <livre/core/data/LODNode.h>
 #include <livre/core/dash/DashRenderNode.h>
 #include <livre/core/dash/DashTree.h>
@@ -121,9 +121,9 @@ struct DepthCompare
         const LODNode& lodNode1 = renderNode1.getLODNode();
         const LODNode& lodNode2 = renderNode2.getLODNode();
 
-        const float depth1 = ( frustum_.getEyeCoords() -
+        const float depth1 = ( frustum_.getEyePos() -
                                lodNode1.getWorldBox().getCenter( )).length();
-        const float depth2 = ( frustum_.getEyeCoords() -
+        const float depth2 = ( frustum_.getEyePos() -
                                lodNode2.getWorldBox().getCenter( )).length();
         return  depth1 < depth2;
     }
@@ -132,31 +132,33 @@ struct DepthCompare
 
 DataUploadProcessor::DataUploadProcessor( DashTree& dashTree,
                                           GLContextPtr shareContext,
-                                          GLContextPtr context,
                                           TextureDataCache& textureDataCache )
-    : GLContextTrait( context )
-    , _dashTree( dashTree )
-    , _shareContext( shareContext )
+    : _dashTree( dashTree )
+    , _glContext( shareContext->clone( ))
+    , _sharedContext( shareContext )
     , _textureDataCache( textureDataCache )
     , _currentFrameID( 0 )
     , _threadOp( TO_NONE )
 {
-    setDashContext( dashTree.createContext() );
+    setDashContext( dashTree.createContext( ));
 }
 
 bool DataUploadProcessor::initializeThreadRun_()
 {
     setName( "DataUp" );
-    LBASSERT( getGLContext( ));
-    _shareContext->shareContext( getGLContext( ));
-    VolumeDataSource& dataSource = _textureDataCache.getDataSource();
+    DataSource& dataSource = _textureDataCache.getDataSource();
     dataSource.initializeGL();
     return DashProcessor::initializeThreadRun_();
 }
 
 void DataUploadProcessor::runLoop_()
 {
-    LBASSERT( getGLContext( ));
+    LBASSERT( _glContext );
+    if( GLContext::getCurrent() != _glContext.get( ))
+    {
+        _glContext->share( *_sharedContext );
+        _glContext->makeCurrent();
+    }
 
     processorInputPtr_->applyAll( CONNECTION_ID );
 
@@ -186,7 +188,7 @@ void DataUploadProcessor::_loadData()
                                                  processorOutputPtr_,
                                                  dashNodeList );
 
-    const RootNode& rootNode = _dashTree.getDataSource()->getVolumeInformation().rootNode;
+    const RootNode& rootNode = _dashTree.getDataSource().getVolumeInfo().rootNode;
 
     DFSTraversal traverser;
     traverser.traverse( rootNode, depthCollectorVisitor, _currentFrameID );

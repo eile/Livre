@@ -6,7 +6,7 @@
 #
 # This file is part of Livre <https://github.com/BlueBrain/Livre>
 #
-if(NOT ZEQ_FOUND)
+if(NOT ZEROEQ_FOUND)
   message(STATUS "Not building GUI due to missing ZeroEQ dependency")
   return()
 endif()
@@ -16,41 +16,40 @@ if(NOT QT5WIDGETS_FOUND)
   return()
 endif()
 
-set(LIVREGUI_MOC_HEADERS
-  MainWindow.h
-  animationController/AnimationController.h
-  renderParametersController/RenderParametersController.h
-  tfEditor/ColorMapWidget.h
-  tfEditor/HoverPoints.h
-  tfEditor/TFWidget.h
-  tfEditor/TransferFunctionEditor.h)
-
 set(LIVREGUI_HEADERS
-  ${LIVREGUI_MOC_HEADERS}
-  types.h
   AppSettings.h
   Controller.h
-  tfEditor/Utilities.h)
+  MainWindow.h
+  animationController/AnimationController.h
+  progress/Progress.h
+  renderParametersController/RenderParametersController.h
+  transferFunctionEditor/ColorMapWidget.h
+  transferFunctionEditor/HoverPoints.h
+  transferFunctionEditor/TFWidget.h
+  transferFunctionEditor/TransferFunctionEditor.h
+  transferFunctionEditor/Utilities.h
+  types.h)
 
 set(LIVREGUI_SOURCES
   Controller.cpp
-  livreGUI.cpp
   MainWindow.cpp
-  animationController/AnimationController.cpp
-  renderParametersController/RenderParametersController.cpp
-  tfEditor/ColorMapWidget.cpp
-  tfEditor/HoverPoints.cpp
-  tfEditor/TFWidget.cpp
-  tfEditor/TransferFunctionEditor.cpp)
-
-set(LIVREGUI_RESOURCES resources/resources.qrc)
-set(LIVREGUI_UI_FORMS
   MainWindow.ui
-  animationController/gui/AnimationController.ui
-  renderParametersController/gui/RenderParametersController.ui
-  tfEditor/gui/TransferFunctionEditor.ui)
+  animationController/AnimationController.cpp
+  animationController/AnimationController.ui
+  livreGUI.cpp
+  progress/Progress.cpp
+  progress/Progress.ui
+  renderParametersController/RenderParametersController.cpp
+  renderParametersController/RenderParametersController.ui
+  resources/resources.qrc
+  transferFunctionEditor/ColorMapWidget.cpp
+  transferFunctionEditor/HoverPoints.cpp
+  transferFunctionEditor/TFWidget.cpp
+  transferFunctionEditor/TransferFunctionEditor.cpp
+  transferFunctionEditor/TransferFunctionEditor.ui)
 
-set(LIVREGUI_LINK_LIBRARIES LivreCore LivreLib Qt5::Widgets zeq zeqHBP ZeroBuf)
+set(LIVREGUI_LINK_LIBRARIES LivreCore LivreLib Qt5::Widgets ZeroEQ ZeroEQHBP
+  ZeroBuf ZeroBufData)
 
 if(MONSTEER_FOUND)
   list(APPEND LIVREGUI_LINK_LIBRARIES MonsteerQt)
@@ -61,4 +60,4 @@ list(APPEND CPPCHECK_EXTRA_ARGS
 
 add_definitions(${QT_DEFINITIONS} "-DBOOST_TT_HAS_OPERATOR_HPP_INCLUDED" )
 
-common_gui_application(livreGUI)
+common_application(livreGUI GUI)

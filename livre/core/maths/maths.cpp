@@ -20,6 +20,9 @@
 #include <livre/core/maths/maths.h>
 #include <vmmlib/matrix.hpp>
 
+#include <livre/core/data/VolumeInformation.h>
+#include <livre/core/render/Frustum.h>
+
 namespace livre
 {
 namespace maths
@@ -29,20 +32,19 @@ void getRotationAndEyePositionFromModelView( const Matrix4f& modelViewMatrix,
                                                    Matrix3f& rotationMatrix,
                                                    Vector3f& eye )
 {
-    Matrix4f iMv;
-    modelViewMatrix.inverse( iMv );
-    iMv.get_sub_matrix( rotationMatrix, 0, 0 );
-    iMv.get_translation( eye );
+    const Matrix4f& iMv = modelViewMatrix.inverse();
+    rotationMatrix = iMv.getSubMatrix< 3, 3 >( 0, 0 );
+    eye = iMv.getTranslation();
 }
 
 Matrix4f computeModelViewMatrix( const Matrix3f& rotationMatrix, const Vector3f& eye )
 {
-    Matrix4f rotationTranspose = Matrix4f::IDENTITY;
-    rotationTranspose.set_sub_matrix( rotationMatrix, 0, 0 );
+    Matrix4f rotationTranspose;
+    rotationTranspose.setSubMatrix( rotationMatrix, 0, 0 );
     rotationTranspose = transpose( rotationTranspose );
 
-    Matrix4f modelViewMatrix = Matrix4f::IDENTITY;
-    modelViewMatrix.set_translation( -eye );
+    Matrix4f modelViewMatrix;
+    modelViewMatrix.setTranslation( -eye );
     return rotationTranspose * modelViewMatrix;
 }
 
@@ -65,13 +67,36 @@ Matrix4f computeModelViewMatrix( const Vector3f& eye, const Vector3f& center )
     const Vector3f xAxis = vmml::normalize( vmml::cross( up, zAxis ));
     const Vector3f yAxis = vmml::cross( zAxis, xAxis );
 
-    Matrix3f rotationMatrix = Matrix4f::IDENTITY;
-    rotationMatrix.set_column( 0, xAxis );
-    rotationMatrix.set_column( 1, yAxis );
-    rotationMatrix.set_column( 2, zAxis );
+    Matrix3f rotationMatrix;
+    rotationMatrix.setColumn( 0, xAxis );
+    rotationMatrix.setColumn( 1, yAxis );
+    rotationMatrix.setColumn( 2, zAxis );
 
     return computeModelViewMatrix( rotationMatrix, eye );
 }
+
+bool isLODVisible( const Frustum& frustum,
+                   const Vector3f& worldCoord,
+                   const float worldSpacePerVoxel,
+                   const uint32_t windowHeight,
+                   const float screenSpaceError )
+{
+    const float t = frustum.top();
+    const float b = frustum.bottom();
+
+    const float worldSpacePerPixel = ( t - b ) / windowHeight;
+    const float pixelPerVoxel = worldSpacePerVoxel / worldSpacePerPixel;
+
+    Vector4f hWorldCoord = worldCoord;
+    hWorldCoord[ 3 ] = 1.0f;
+    const float distance = std::abs( frustum.getNearPlane().dot( hWorldCoord ));
+
+    const float n = frustum.nearPlane();
+    const float pixelPerVoxelInDistance = pixelPerVoxel * n /  ( n + distance );
+
+    return pixelPerVoxelInDistance <= screenSpaceError;
+}
+
 
 }
 }

@@ -25,8 +25,6 @@
 #include <livre/core/data/LODNode.h>
 #include <livre/core/maths/maths.h>
 #include <livre/core/render/GLContext.h>
-#include <livre/core/render/GLWidget.h>
-#include <livre/core/render/View.h>
 
 #include <livre/lib/configuration/VolumeRendererParameters.h>
 
@@ -42,7 +40,7 @@
 namespace livre
 {
 
-#define glewGetContext() GLContext::glewGetContext()
+#define glewGetContext() GLContext::getCurrent()->glewGetContext()
 
 namespace
 {
@@ -62,9 +60,7 @@ struct RayCastRenderer::Impl
     Impl( const uint32_t samplesPerRay,
           const uint32_t samplesPerPixel,
           const VolumeInformation& volInfo )
-        :  _framebufferTexture(
-            new eq::util::Texture( GL_TEXTURE_RECTANGLE_ARB, glewGetContext( )))
-        , _shaders( new GLSLShaders )
+        : _framebufferTexture( GL_TEXTURE_RECTANGLE_ARB, glewGetContext( ))
         , _nSamplesPerRay( samplesPerRay )
         , _nSamplesPerPixel( samplesPerPixel )
         , _computedSamplesPerRay( samplesPerRay )
@@ -75,7 +71,7 @@ struct RayCastRenderer::Impl
         initTransferFunction( transferFunction );
 
         // TODO: Add the shaders from resource directory
-        const int error = _shaders->loadShaders( ShaderData( vertRayCast_glsl,
+        const int error = _shaders.loadShaders( ShaderData( vertRayCast_glsl,
                                                              fragRayCast_glsl ));
         if( error != GL_NO_ERROR )
             LBTHROW( std::runtime_error( "Can't load glsl shaders: " +
@@ -85,7 +81,7 @@ struct RayCastRenderer::Impl
 
     ~Impl()
     {
-        _framebufferTexture->flush();
+        _framebufferTexture.flush();
     }
 
     void update( const FrameData& frameData )
@@ -113,42 +109,26 @@ struct RayCastRenderer::Impl
         }
         glBindTexture( GL_TEXTURE_1D, _transferFunctionTexture );
 
-        const UInt8Vector& transferFunctionData = transferFunction.getData();
+        const UInt8s& transferFunctionData = transferFunction.getData();
         glTexImage1D(  GL_TEXTURE_1D, 0, GL_RGBA, GLsizei(transferFunctionData.size()/4u), 0,
                        GL_RGBA, GL_UNSIGNED_BYTE, &transferFunctionData[ 0 ] );
     }
 
-    void readFromFrameBuffer( const GLWidget& glWidget,
-                              const View& view )
+    void readFromFrameBuffer( const PixelViewport& viewport )
     {
-        const Viewport& viewport = glWidget.getViewport( view );
         const eq::PixelViewport pvp( 0, 0, viewport[2], viewport[3] );
-        _framebufferTexture->copyFromFrameBuffer( GL_RGBA, pvp );
+        _framebufferTexture.copyFromFrameBuffer( GL_RGBA, pvp );
     }
 
-    void onFrameStart( const GLWidget& glWidget LB_UNUSED,
-                       const View& view LB_UNUSED,
+    void onFrameStart( const Frustum& frustum,
                        const RenderBricks& renderBricks )
     {
-    #ifdef LIVRE_DEBUG_RENDERING
-        std::sort( _usedTextures[1].begin(), _usedTextures[1].end( ));
-        if( _usedTextures[0] != _usedTextures[1] )
-        {
-            std::cout << "Render ";
-            std::copy( _usedTextures[1].begin(), _usedTextures[1].end(),
-                       std::ostream_iterator< uint32_t >( std::cout, " " ));
-            std::cout << " in " << (void*)this << std::endl;
-        }
-        _usedTextures[0].swap( _usedTextures[1] );
-        _usedTextures[1].clear();
-    #endif
-
         if( _nSamplesPerRay == 0 ) // Find sampling rate
         {
             uint32_t maxLOD = 0;
-            for( const RenderBrickPtr& rb : renderBricks )
+            for( const RenderBrick& rb : renderBricks )
             {
-                const uint32_t level = rb->getLODNode().getRefLevel();
+                const uint32_t level = rb.getLODNode().getRefLevel();
                 if( level > maxLOD )
                     maxLOD = level;
             }
@@ -165,20 +145,18 @@ struct RayCastRenderer::Impl
         glDisable( GL_DEPTH_TEST );
         glDisable( GL_BLEND );
 
-        GLSLShaders::Handle program = _shaders->getProgram( );
+        GLSLShaders::Handle program = _shaders.getProgram( );
         LBASSERT( program );
 
         // Enable shaders
         glUseProgram( program );
         GLint tParamNameGL;
 
-        const Frustum& frustum = view.getFrustum();
-
         tParamNameGL = glGetUniformLocation( program, "invProjectionMatrix" );
-        glUniformMatrix4fv( tParamNameGL, 1, false, frustum.getInvProjectionMatrix( ).array );
+        glUniformMatrix4fv( tParamNameGL, 1, false, frustum.getInvProjMatrix( ).array );
 
         tParamNameGL = glGetUniformLocation( program, "invModelViewMatrix" );
-        glUniformMatrix4fv( tParamNameGL, 1, false, frustum.getInvModelViewMatrix( ).array );
+        glUniformMatrix4fv( tParamNameGL, 1, false, frustum.getInvMVMatrix( ).array );
 
         // Because the volume is centered to the origin we can compute the volume AABB by using
         // the volume total size.
@@ -202,7 +180,7 @@ struct RayCastRenderer::Impl
         glUniform2fv( tParamNameGL, 1, depthRange.array );
 
         tParamNameGL = glGetUniformLocation( program, "worldEyePosition" );
-        glUniform3fv( tParamNameGL, 1, frustum.getEyeCoords( ).array );
+        glUniform3fv( tParamNameGL, 1, frustum.getEyePos( ).array );
 
         tParamNameGL = glGetUniformLocation( program, "nSamplesPerRay" );
         glUniform1i( tParamNameGL, _computedSamplesPerRay );
@@ -220,12 +198,9 @@ struct RayCastRenderer::Impl
         glUseProgram( 0 );
     }
 
-
-    void renderBrick( const GLWidget& glWidget,
-                      const View& view,
-                      const RenderBrick& rb )
+    void renderBrick( const PixelViewport& viewport, const RenderBrick& rb )
     {
-        GLSLShaders::Handle program = _shaders->getProgram( );
+        GLSLShaders::Handle program = _shaders.getProgram( );
         LBASSERT( program );
 
         // Enable shaders
@@ -257,12 +232,12 @@ struct RayCastRenderer::Impl
         tParamNameGL = glGetUniformLocation( program, "voxelSpacePerWorldSpace" );
         glUniform3fv( tParamNameGL, 1, voxSize.array );
 
-        readFromFrameBuffer( glWidget, view );
+        readFromFrameBuffer( viewport );
 
         glActiveTexture( GL_TEXTURE2 );
-        _framebufferTexture->bind( );
-        _framebufferTexture->applyZoomFilter( eq::FILTER_LINEAR );
-        _framebufferTexture->applyWrap( );
+        _framebufferTexture.bind( );
+        _framebufferTexture.applyZoomFilter( eq::FILTER_LINEAR );
+        _framebufferTexture.applyWrap( );
 
         tParamNameGL = glGetUniformLocation( program, "frameBufferTex" );
         glUniform1i( tParamNameGL, 2 );
@@ -282,16 +257,30 @@ struct RayCastRenderer::Impl
         tParamNameGL = glGetUniformLocation( program, "refLevel" );
         glUniform1i( tParamNameGL, refLevel );
 
-    #ifdef LIVRE_DEBUG_RENDERING
         _usedTextures[1].push_back( texState->textureId );
-    #endif
         rb.drawBrick( false /* draw front */, true /* cull back */ );
 
         glUseProgram( 0 );
     }
 
-    std::unique_ptr< eq::util::Texture > _framebufferTexture;
-    GLSLShadersPtr _shaders;
+    void onFrameEnd()
+    {
+        std::sort( _usedTextures[1].begin(), _usedTextures[1].end( ));
+#ifdef LIVRE_DEBUG_RENDERING
+        if( _usedTextures[0] != _usedTextures[1] )
+        {
+            std::cout << "Rendered ";
+            std::copy( _usedTextures[1].begin(), _usedTextures[1].end(),
+                       std::ostream_iterator< uint32_t >( std::cout, " " ));
+            std::cout << " in " << (void*)this << std::endl;
+        }
+#endif
+        _usedTextures[0].swap( _usedTextures[1] );
+        _usedTextures[1].clear();
+    }
+
+    eq::util::Texture _framebufferTexture;
+    GLSLShaders _shaders;
     uint32_t _nSamplesPerRay;
     uint32_t _nSamplesPerPixel;
     uint32_t _computedSamplesPerRay;
@@ -302,11 +291,8 @@ struct RayCastRenderer::Impl
 
 RayCastRenderer::RayCastRenderer( const uint32_t samplesPerRay,
                                   const uint32_t samplesPerPixel,
-                                  const uint32_t gpuDataType,
-                                  const int32_t internalFormat,
                                   const VolumeInformation& volInfo )
-    : Renderer( volInfo.compCount, gpuDataType, internalFormat ),
-      _impl( new RayCastRenderer::Impl( samplesPerRay,
+    : _impl( new RayCastRenderer::Impl( samplesPerRay,
                                         samplesPerPixel,
                                         volInfo ))
 {}
@@ -319,19 +305,29 @@ void RayCastRenderer::update( const FrameData& frameData )
     _impl->update( frameData );
 }
 
-void RayCastRenderer::_onFrameStart( const GLWidget& glWidget,
-                                     const View& view,
+void RayCastRenderer::_onFrameStart( const Frustum& frustum,
+                                     const PixelViewport&,
                                      const RenderBricks& renderBricks )
 {
-    _impl->onFrameStart( glWidget, view, renderBricks );
+    _impl->onFrameStart( frustum, renderBricks );
 }
 
 
-void RayCastRenderer::_renderBrick( const GLWidget& glWidget,
-                                    const View& view,
+void RayCastRenderer::_renderBrick( const Frustum&, const PixelViewport& view,
                                     const RenderBrick& renderBrick )
 {
-    _impl->renderBrick( glWidget, view, renderBrick );
+    _impl->renderBrick( view, renderBrick );
+}
+
+void RayCastRenderer::_onFrameEnd( const Frustum&, const PixelViewport&,
+                                   const RenderBricks& )
+{
+    _impl->onFrameEnd();
+}
+
+size_t RayCastRenderer::getNumBricksUsed() const
+{
+    return _impl->_usedTextures[0].size();
 }
 
 }

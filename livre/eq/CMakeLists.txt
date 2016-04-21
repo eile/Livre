@@ -19,10 +19,10 @@ include_directories(${PROJECT_BINARY_DIR})
 
 set(LIVREEQ_LINK_LIBRARIES PUBLIC LivreLib Equalizer)
 
-if(ZEQ_FOUND)
-  list(APPEND LIVREEQ_HEADERS zeq/communicator.h)
-  list(APPEND LIVREEQ_SOURCES zeq/communicator.cpp)
-  list(APPEND LIVREEQ_LINK_LIBRARIES PRIVATE zeq zeqHBP)
+if(TARGET ZeroEQ)
+  list(APPEND LIVREEQ_HEADERS zeroeq/communicator.h)
+  list(APPEND LIVREEQ_SOURCES zeroeq/communicator.cpp)
+  list(APPEND LIVREEQ_LINK_LIBRARIES PRIVATE ZeroEQ ZeroEQHBP ZeroBufData)
 endif()
 
 if(LibJpegTurbo_FOUND)
@@ -33,13 +33,6 @@ if(RESTBRIDGE_FOUND)
   list(APPEND LIVREEQ_LINK_LIBRARIES PRIVATE RESTBridge)
 endif()
 
-if(NOT MSVC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-overloaded-virtual")
-endif()
-
 set(LIVREEQ_INCLUDE_NAME livre/eq)
 set(LIVREEQ_NAMESPACE livreeq)
 common_library(LivreEq)
-if(CMAKE_COMPILER_IS_GNUCXX_PURE)
-  set_target_properties(LivreEq PROPERTIES LINK_FLAGS "-Wl,--no-undefined")
-endif()

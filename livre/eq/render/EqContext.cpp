@@ -1,5 +1,5 @@
-/* Copyright (c) 2011-2014, EPFL/Blue Brain Project
- *                     Ahmet Bilgili <ahmet.bilgili@epfl.ch>
+/* Copyright (c) 2011-2016, EPFL/Blue Brain Project
+ *                          Ahmet Bilgili <ahmet.bilgili@epfl.ch>
  *
  * This file is part of Livre <https://github.com/BlueBrain/Livre>
  *
@@ -27,60 +27,65 @@ namespace livre
 {
 
 EqContext::EqContext( Window* const window )
-    : GLContext()
-    , window_( window )
-    , systemWindow_( 0 )
-{
-}
+    : GLContext( window->glewGetContext( ))
+    , _window( window )
+    , _systemWindow( 0 )
+{}
 
 EqContext::~EqContext()
 {
-    delete systemWindow_;
+    delete _systemWindow;
 }
 
-void EqContext::makeCurrent()
+void EqContext::share( const GLContext& src )
 {
-    if( systemWindow_ )
-        systemWindow_->makeCurrent();
-}
-
-void EqContext::doneCurrent()
-{
-
-}
-
-void EqContext::shareContext_( GLContext* srcSharedContext )
-{
-    LBASSERT( window_ );
+    LBASSERT( _window );
 
     // Context is already created so return.
-    if( systemWindow_ )
+    if( _systemWindow )
         return;
 
-    EqContext* parent = dynamic_cast< EqContext * >( srcSharedContext );
+    const EqContext* parent = dynamic_cast< const EqContext* >( &src );
     if( !parent )
     {
         LBERROR << "Only same kind of contexts can be shared" << std::endl;
         return;
     }
 
-    if( !parent->window_ )
+    if( !parent->_window )
     {
         LBERROR << "Parent context can not be NULL" << std::endl;
         return;
     }
 
-    eq::WindowSettings settings = window_->getSettings();
-    settings.setSharedContextWindow( window_->getSystemWindow() );
+    eq::WindowSettings settings = _window->getSettings();
+    settings.setSharedContextWindow( _window->getSystemWindow() );
     settings.setIAttribute( eq::WindowSettings::IATTR_HINT_DRAWABLE, eq::OFF );
-    const eq::Pipe* pipe = window_->getPipe();
-    systemWindow_ = pipe->getWindowSystem().createWindow( window_, settings );
+    const eq::Pipe* pipe = _window->getPipe();
+    _systemWindow = pipe->getWindowSystem().createWindow( _window, settings );
 
-    if( !systemWindow_->configInit( ) )
+    if( !_systemWindow->configInit( ) )
     {
-        delete systemWindow_;
-        systemWindow_ = 0;
+        delete _systemWindow;
+        _systemWindow = 0;
     }
 }
+
+GLContextPtr EqContext::clone() const
+{
+    return GLContextPtr( new EqContext( _window ));
+}
+
+void EqContext::makeCurrent()
+{
+    if( _systemWindow )
+    {
+        GLContext::makeCurrent();
+        _systemWindow->makeCurrent();
+    }
+}
+
+void EqContext::doneCurrent()
+{}
 
 }

@@ -1,5 +1,5 @@
-/* Copyright (c) 2011-2014, EPFL/Blue Brain Project
- *                     Ahmet Bilgili <ahmet.bilgili@epfl.ch>
+/* Copyright (c) 2011-2016, EPFL/Blue Brain Project
+ *                          Ahmet Bilgili <ahmet.bilgili@epfl.ch>
  *
  * This file is part of Livre <https://github.com/BlueBrain/Livre>
  *
@@ -23,7 +23,6 @@
 #include <livre/core/api.h>
 #include <livre/core/types.h>
 #include <livre/core/lunchboxTypes.h>
-#include <boost/enable_shared_from_this.hpp>
 
 namespace livre
 {
@@ -31,22 +30,27 @@ namespace livre
 /**
  * The GLContext class is the warpper for different kinds of OpenGL contexts
  */
-class GLContext : public boost::enable_shared_from_this< GLContext >
+class GLContext
 {
 public:
-    LIVRECORE_API GLContext();
+    LIVRECORE_API GLContext( const GLEWContext* glewContext );
     LIVRECORE_API virtual ~GLContext();
 
     /**
-     * Shares the current context with the given context.
-     * @param dstContextPtr The destination context to share the context with
+     * Shares the context with the source context.
+     * @param src is the source context to share the context with
      */
-    LIVRECORE_API void shareContext( GLContextPtr dstContextPtr );
+    virtual void share( const GLContext& src ) = 0;
+
+    /**
+     * @return a clone of the context.
+     */
+    virtual GLContextPtr clone() const = 0;
 
     /**
      * Makes the context current.
      */
-    virtual void makeCurrent() = 0;
+    virtual void makeCurrent();
 
     /**
      * Clears the current context.
@@ -58,29 +62,11 @@ public:
      */
     LIVRECORE_API static const GLContext* getCurrent();
 
-    /**
-     * Set a global glew context to used it whenever OpenGL function pointers
-     * need to be resolved (Windows only).
-     *
-     * As there is only a single glew context managed by this class, this won't
-     * work in a multi GPU scenario where per GPU glew contexts are required.
-     */
-    LIVRECORE_API static void glewSetContext( const GLEWContext* );
-
     /** @return the global glew context, @see glewSetContext */
-    LIVRECORE_API static const GLEWContext* glewGetContext();
-
-protected:
-
-   /**
-     * Implements the sharing of the context from the srcSharedContext.
-     * @param srcSharedContext The source context.
-     */
-    virtual void shareContext_( GLContext* srcSharedContext ) = 0;
+    LIVRECORE_API const GLEWContext* glewGetContext() const;
 
 private:
-    GLContextPtr parent_;
-    static const GLEWContext* _glewContext;
+    const GLEWContext* _glewContext;
 };
 
 }

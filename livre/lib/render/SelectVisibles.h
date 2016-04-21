@@ -17,11 +17,17 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef LIVRE_SELECTVISIBLES_H
-#define LIVRE_SELECTVISIBLES_H
+#ifndef _SelectVisibles_h_
+#define _SelectVisibles_h_
 
 #include <livre/lib/types.h>
 #include <livre/core/visitor/RenderNodeVisitor.h>
+#include <livre/core/dash/DashRenderNode.h>
+#include <livre/core/dash/DashTree.h>
+#include <livre/core/data/LODNode.h>
+#include <livre/core/data/DataSource.h>
+#include <livre/core/maths/maths.h>
+#include <livre/core/data/VolumeInformation.h>
 
 //#define LIVRE_STATIC_DECOMPOSITION
 
@@ -31,16 +37,19 @@ namespace livre
 class SelectVisibles : public livre::RenderNodeVisitor
 {
 public:
-    SelectVisibles( DashTree& dashTree, const Frustum& frustum,
-                    const uint32_t windowHeight, const float screenSpaceError,
-                    const float worldSpacePerVoxel, const uint32_t volumeDepth,
-                    const uint32_t minLOD, const uint32_t maxLOD,
+    SelectVisibles( DashTree& dashTree,
+                    const Frustum& frustum,
+                    const uint32_t windowHeight,
+                    const float screenSpaceError,
+                    const uint32_t minLOD,
+                    const uint32_t maxLOD,
                     const Range& range )
     : RenderNodeVisitor( dashTree )
-    , _lodEvaluator( windowHeight, screenSpaceError, worldSpacePerVoxel,
-                     minLOD, maxLOD )
     , _frustum( frustum )
-    , _volumeDepth( volumeDepth )
+    , _windowHeight( windowHeight )
+    , _screenSpaceError( screenSpaceError )
+    , _minLOD( minLOD )
+    , _maxLOD( maxLOD )
     , _range( range )
     {}
 
@@ -58,20 +67,48 @@ protected:
         const Boxf& worldBox = lodNode.getWorldBox();
         const bool isInFrustum = _frustum.boxInFrustum( worldBox );
         renderNode.setInFrustum( isInFrustum );
+        renderNode.setLODVisible( false );
         if( !isInFrustum )
         {
-            renderNode.setLODVisible( false );
             state.setVisitChild( false );
             return;
         }
 
         Vector3f vmin, vmax;
-        worldBox.computeNearFar( _frustum.getNearPlane(), vmin, vmax );
+        const Plane& nearPlane = _frustum.getNearPlane();
 
-        const uint32_t lod =
-            _lodEvaluator.getLODForPoint( _frustum, _volumeDepth, vmin );
+        worldBox.computeNearFar( nearPlane, vmin, vmax );
 
-        const bool isLODVisible = (lod <= lodNode.getNodeId().getLevel( ));
+        Vector4f hVmin = vmin;
+        hVmin[ 3 ] = 1.0f;
+
+        Vector4f hVmax = vmax;
+        hVmax[ 3 ] = 1.0f;
+
+        // The bounding box intersects the plane
+        if( _frustum.getNearPlane().dot( hVmin ) < 0 ||
+            _frustum.getNearPlane().dot( hVmax ) < 0 )
+        {
+            // Where eye direction intersects with near plane
+            vmin = _frustum.getEyePos() - _frustum.getViewDir() * _frustum.nearPlane();
+        }
+
+        const Vector3f voxelBox = lodNode.getVoxelBox().getSize();
+        const Vector3f worldSpacePerVoxel = worldBox.getSize() / voxelBox;
+
+        bool isLODVisible = maths::isLODVisible( _frustum,
+                                                  vmin,
+                                                  worldSpacePerVoxel.find_min(),
+                                                  _windowHeight,
+                                                  _screenSpaceError );
+
+        const VolumeInformation& volInfo =
+                getDashTree().getDataSource().getVolumeInfo();
+        const uint32_t depth = volInfo.rootNode.getDepth();
+        isLODVisible = ( isLODVisible && lodNode.getRefLevel() >= _minLOD )
+                       || ( lodNode.getRefLevel() == _maxLOD )
+                       || ( lodNode.getRefLevel() == depth - 1 );
+
         if( isLODVisible )
             _visibles.push_back( renderNode );
         state.setVisitChild( !isLODVisible );
@@ -105,12 +142,15 @@ protected:
     }
 
 private:
-    const ScreenSpaceLODEvaluator _lodEvaluator;
-    const Frustum& _frustum;
-    const uint32_t _volumeDepth;
-    const Range _range;
 
+    const Frustum& _frustum;
+    const uint32_t _windowHeight;
+    const float _screenSpaceError;
+    const uint32_t _minLOD;
+    const uint32_t _maxLOD;
+    const Range _range;
     DashRenderNodes _visibles;
 };
 }
 #endif
+

@@ -40,8 +40,6 @@
 #include <livre/lib/cache/TextureObject.h>
 
 #include <livre/lib/render/AvailableSetGenerator.h>
-#include <livre/lib/render/RenderView.h>
-#include <livre/lib/render/ScreenSpaceLODEvaluator.h>
 #include <livre/lib/render/SelectVisibles.h>
 #include <livre/lib/visitor/DFSTraversal.h>
 
@@ -50,73 +48,20 @@
 #include <livre/core/dash/DashTree.h>
 #include <livre/core/dashpipeline/DashProcessorInput.h>
 #include <livre/core/dashpipeline/DashProcessorOutput.h>
-#include <livre/core/data/VolumeDataSource.h>
-#include <livre/core/mathTypes.h>
+#include <livre/core/data/DataSource.h>
 #include <livre/core/render/FrameInfo.h>
 #include <livre/core/render/Frustum.h>
-#include <livre/core/render/GLWidget.h>
 #include <livre/core/render/RenderBrick.h>
 
+#ifdef LIVRE_USE_ZEROEQ
+#  include <zeroeq/publisher.h>
+#endif
+#include <zerobuf/data/progress.h>
 #include <eq/eq.h>
 #include <eq/gl.h>
 
 namespace livre
 {
-
-/**
- * The EqRenderView class implements livre \see RenderView for internal use of \see eq::Channel.
- */
-class EqRenderView : public RenderView
-{
-public:
-    EqRenderView( Channel::Impl *channel, const DashTree& dashTree );
-    const Frustum& getFrustum() const final;
-
-private:
-    Channel::Impl* const _channel;
-};
-
-typedef boost::shared_ptr< EqRenderView > EqRenderViewPtr;
-
-/** Implements livre \GLWidget for internal use of eq::Channel. */
-class EqGLWidget : public GLWidget
-{
-public:
-    explicit EqGLWidget( Channel* channel )
-        : _channel( channel )
-    {}
-
-    Viewport getViewport( const View& ) const final
-    {
-        const eq::PixelViewport& channelPvp = _channel->getPixelViewport();
-        return Viewport( channelPvp.x, channelPvp.y,
-                         channelPvp.w, channelPvp.h );
-    }
-
-    uint32_t getX() const
-    {
-        return _channel->getPixelViewport().x;
-    }
-
-    uint32_t getY() const
-    {
-        return _channel->getPixelViewport().y;
-    }
-
-    uint32_t getWidth() const
-    {
-        return _channel->getPixelViewport().w;
-    }
-
-    uint32_t getHeight() const
-    {
-        return _channel->getPixelViewport().h;
-    }
-
-    Channel* _channel;
-};
-
-
 const float nearPlane = 0.1f;
 const float farPlane = 15.0f;
 
@@ -152,8 +97,12 @@ struct Channel::Impl
 public:
     explicit Impl( Channel* channel )
           : _channel( channel )
-          , _glWidgetPtr( new EqGLWidget( channel ))
+          , _frustum( Matrix4f(), Matrix4f( ))
           , _frameInfo( _frustum, INVALID_FRAME )
+          , _progress( "Loading bricks", 0 )
+    {}
+
+    void initializeFrame()
     {
         channel->setNearFar( nearPlane, farPlane );
         _image.setAlphaUsage( true );
@@ -179,19 +128,10 @@ public:
                 static_cast< livre::Node* >( _channel->getNode( ));
 
         const livre::DashTree& dashTree = node->getDashTree();
-
-        ConstVolumeDataSourcePtr dataSource = dashTree.getDataSource();
-
-        _renderViewPtr.reset( new EqRenderView( this, dashTree ));
-
-        RendererPtr renderer( new RayCastRenderer(
-                                  nSamplesPerRay,
-                                  nSamplesPerPixel,
-                                  GL_UNSIGNED_BYTE,
-                                  GL_LUMINANCE8,
-                                  dataSource->getVolumeInformation( )));
-
-        _renderViewPtr->setRenderer( renderer );
+        const DataSource& dataSource = dashTree.getDataSource();
+        _renderer.reset( new RayCastRenderer( nSamplesPerRay,
+                                              nSamplesPerPixel,
+                                              dataSource.getVolumeInfo( )));
     }
 
     const Frustum& setupFrustum()
@@ -200,7 +140,7 @@ public:
         const eq::Frustumf& eqFrustum = _channel->getFrustum();
         const eq::Matrix4f& projection = eqFrustum.computePerspectiveMatrix();
 
-        _frustum.setup( modelView, projection );
+        _frustum = Frustum( modelView, projection );
         return _frustum;
     }
 
@@ -242,6 +182,9 @@ public:
         for( const ConstCacheObjectPtr& cacheObject: renderNodes )
         {
             const ConstTextureObjectPtr texture =
+                std::static_pointer_cast< const TextureObject >( cacheObject );
+
+            const LODNode& lodNode =
                 boost::static_pointer_cast< const TextureObject >( cacheObject );
             const LODNode& lodNode =
                 dashTree.getDataSource()->getNode( NodeId( cacheObject->getId( )));
@@ -339,16 +282,14 @@ public:
 
         DashTree& dashTree = node->getDashTree();
 
-        const VolumeInformation& volInfo = dashTree.getDataSource()->getVolumeInformation();
+        const VolumeInformation& volInfo = dashTree.getDataSource().getVolumeInfo();
 
-        const float worldSpacePerVoxel = volInfo.worldSpacePerVoxel;
-        const uint32_t volumeDepth = volInfo.rootNode.getDepth();
         const eq::Range& range = _channel->getRange();
-
-        SelectVisibles visitor( dashTree, _frustum,
+        SelectVisibles visitor( dashTree,
+                                _frustum,
                                 _channel->getPixelViewport().h,
-                                screenSpaceError, worldSpacePerVoxel,
-                                volumeDepth, minLOD, maxLOD,
+                                screenSpaceError,
+                                minLOD, maxLOD,
                                 Range{{ range.start, range.end }});
 
         livre::DFSTraversal traverser;
@@ -360,10 +301,10 @@ public:
 
     void updateRegions( const RenderBricks& bricks )
     {
-        const Matrix4f& mvpMatrix = _frustum.getModelViewProjectionMatrix();
-        for( const RenderBrickPtr& brick : bricks )
+        const Matrix4f& mvpMatrix = _frustum.getMVPMatrix();
+        for( const RenderBrick& brick : bricks )
         {
-            const Boxf& worldBox = brick->getLODNode().getWorldBox();
+            const Boxf& worldBox = brick.getLODNode().getWorldBox();
             const Vector3f& min = worldBox.getMin();
             const Vector3f& max = worldBox.getMax();
             const Vector3f corners[8] =
@@ -405,6 +346,32 @@ public:
 #endif
     }
 
+    void freeTexture( const NodeId& nodeId )
+    {
+        livre::Node* node = static_cast< livre::Node* >( _channel->getNode( ));
+        DashTree& dashTree = node->getDashTree();
+
+        dash::NodePtr dashNode = dashTree.getDashNode( nodeId );
+        if( !dashNode )
+            return;
+
+        DashRenderNode renderNode( dashNode );
+        if( renderNode.getLODNode().getRefLevel() != 0 )
+            renderNode.setTextureObject( CacheObjectPtr( ));
+    }
+
+    void freeTextures()
+    {
+        for( const auto& cacheObject: _frameInfo.renderNodes )
+        {
+            const NodeId nodeId(cacheObject->getId( ));
+            freeTexture( nodeId );
+        }
+
+        for( const NodeId& nodeId: _frameInfo.allNodes )
+            freeTexture( nodeId );
+    }
+
     void frameRender()
     {
         _renderSets.clear();
@@ -419,9 +386,6 @@ public:
         _frameInfo = FrameInfo( _frustum, frame );
 
         const DashRenderNodes& visibles = requestData();
-        const eq::fabric::Viewport& vp = _channel->getViewport( );
-        const Viewport viewport( vp.x, vp.y, vp.w, vp.h );
-        _renderViewPtr->setViewport( viewport );
 
         livre::Window* window = static_cast< livre::Window* >( _channel->getWindow( ));
         const livre::Pipe* pipe = static_cast< const livre::Pipe* >( _channel->getPipe( ));
@@ -481,16 +445,12 @@ public:
     void configInit()
     {
         initializeRenderer();
-
-        Window* window = static_cast< Window* >( _channel->getWindow( ));
-        _glWidgetPtr->setGLContext( GLContextPtr( new EqContext( window )));
     }
 
     void configExit()
     {
         _frameInfo.renderNodes.clear();
         _image.resetPlugins();
-        _renderViewPtr.reset();
     }
 
     void addImageListener()
@@ -516,6 +476,16 @@ public:
             _channel->drawStatistics();
             drawCacheStatistics();
         }
+
+#ifdef LIVRE_USE_ZEROEQ
+        const size_t all = _frameInfo.allNodes.size();
+        if( all > 0 )
+        {
+            _progress.restart( all );
+            _progress += all - _frameInfo.notAvailableRenderNodes.size();
+            _publisher.publish( _progress );
+        }
+#endif
     }
 
     void drawCacheStatistics()
@@ -533,23 +503,19 @@ public:
         glMatrixMode( GL_MODELVIEW );
 
         livre::Node* node = static_cast< livre::Node* >( _channel->getNode( ));
-        std::ostringstream os;
         const size_t all = _frameInfo.allNodes.size();
         const size_t missing = _frameInfo.notAvailableRenderNodes.size();
         const float done = all > 0 ? float( all - missing ) / float( all ) : 0;
-        os << node->getTextureDataCache().getStatistics() << "  "
-           << int( 100.f * done + .5f ) << "% loaded" << std::endl;
-        float y = 220;
-        _drawText( os.str(), y );
-
         Window* window = static_cast< Window* >( _channel->getWindow( ));
-        os.str("");
-        os << window->getTextureCache().getStatistics();
-        _drawText( os.str(), y );
 
-        ConstVolumeDataSourcePtr dataSource = static_cast< livre::Node* >(
+        std::ostringstream os;
+        os << node->getTextureDataCache().getStatistics() << "  "
+           << int( 100.f * done + .5f ) << "% loaded" << std::endl
+           << window->getTextureCache().getStatistics();
+
+        const DataSource& dataSource = static_cast< livre::Node* >(
             _channel->getNode( ))->getDashTree().getDataSource();
-        const VolumeInformation& info = dataSource->getVolumeInformation();
+        const VolumeInformation& info = dataSource.getVolumeInfo();
         Vector3f voxelSize = info.boundingBox.getSize() / info.voxels;
         std::string unit = "m";
         if( voxelSize.x() < 0.000001f )
@@ -563,16 +529,18 @@ public:
             voxelSize *= 1000;
         }
 
-        os.str("");
-        os << "Total resolution " << info.voxels << " depth "
+        const size_t nBricks = _renderer->getNumBricksUsed();
+        const float mbBricks =
+            float( dataSource.getVolumeInfo().maximumBlockSize.product( )) /
+            1024.f / 1024.f * float( nBricks );
+        os << nBricks << " bricks / " << mbBricks << " MB rendered" << std::endl
+           << "Total resolution " << info.voxels << " depth "
            << info.rootNode.getDepth() << std::endl
            << "Block resolution " << info.maximumBlockSize << std::endl
            << unit << "/voxel " << voxelSize;
-        _drawText( os.str( ), y );
-    }
 
-    void _drawText( std::string text, float& y )
-    {
+        float y = 240.f;
+        std::string text = os.str();
         const eq::util::BitmapFont* font =_channel->getWindow()->getSmallFont();
         for( size_t pos = text.find( '\n' ); pos != std::string::npos;
              pos = text.find( '\n' ))
@@ -583,7 +551,7 @@ public:
             text = text.substr( pos + 1 );
             y -= 16.f;
         }
-        // last line
+        // last line might not end with /n
         glRasterPos3f( 10.f, y, 0.99f );
         font->draw( text );
     }
@@ -704,10 +672,8 @@ public:
         LBASSERT( !_channel->useOrtho( ));
 
         // calculate modelview inversed+transposed matrix
-        Matrix3f modelviewITM;
-        Matrix4f modelviewIM;
-        modelView.inverse( modelviewIM );
-        Matrix3f( modelviewIM ).transpose_to( modelviewITM );
+        const Matrix4f& modelviewIM = modelView.inverse();
+        const Matrix3f& modelviewITM = vmml::transpose( Matrix3f( modelviewIM ));
 
         Vector3f norm = modelviewITM * Vector3f( 0.0f, 0.0f, 1.0f );
         norm.normalize();
@@ -756,23 +722,15 @@ public:
     livre::Channel* const _channel;
     eq::Image _image;
     Frustum _frustum;
-    ViewPtr _renderViewPtr;
-    GLWidgetPtr _glWidgetPtr;
     FrameGrabber _frameGrabber;
     FrameInfo _frameInfo;
     RenderSets _renderSets;
+    std::unique_ptr< RayCastRenderer > _renderer;
+    ::zerobuf::data::Progress _progress;
+#ifdef LIVRE_USE_ZEROEQ
+    zeroeq::Publisher _publisher;
+#endif
 };
-
-EqRenderView::EqRenderView( Channel::Impl* channel,
-                            const DashTree& dashTree )
-    : RenderView( dashTree )
-    , _channel( channel )
-{}
-
-const Frustum& EqRenderView::getFrustum() const
-{
-    return _channel->setupFrustum();
-}
 
 Channel::Channel( eq::Window* parent )
         : eq::Channel( parent )
