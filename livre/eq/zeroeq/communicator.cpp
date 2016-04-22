@@ -278,8 +278,6 @@ private:
             std::bind( &Impl::requestImageJPEG, this );
         _requests[::zeroeq::vocabulary::EVENT_EXIT] =
             std::bind( &Impl::requestExit, this );
-        _requests[::zeq::vocabulary::EVENT_VOCABULARY] =
-            std::bind( &Impl::publishVocabulary, this );
         const auto& renderParams = _getFrameData().getVRParameters();
         _requests[ renderParams.getTypeIdentifier( )] = [&]
             { _publisher->publish( _getFrameData().getVRParameters( )); };

@@ -166,6 +166,7 @@ typedef std::vector< CacheId > CacheIds;
 typedef std::vector< CacheObjectPtr > CacheObjects;
 typedef std::vector< ConstCacheObjectPtr > ConstCacheObjects;
 typedef std::vector< RenderBrick > RenderBricks;
+typedef std::vector< RenderBricks > RenderSets;
 
 /**
  * Map definitions

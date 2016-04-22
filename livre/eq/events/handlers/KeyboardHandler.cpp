@@ -1,5 +1,5 @@
-/* Copyright (c) 2011-2016, EPFL/Blue Brain Project
- *                          Ahmet Bilgili <ahmet.bilgili@epfl.ch>
+/* Copyright (c) 2011-2014, EPFL/Blue Brain Project
+ *                     Ahmet Bilgili <ahmet.bilgili@epfl.ch>
  *
  * This file is part of Livre <https://github.com/BlueBrain/Livre>
  *
@@ -19,7 +19,6 @@
 
 #include <livre/eq/Config.h>
 #include <livre/eq/FrameData.h>
-#include <livre/eq/settings/CameraSettings.h>
 #include <livre/eq/settings/FrameSettings.h>
 #include <livre/eq/settings/RenderSettings.h>
 
@@ -43,7 +42,6 @@ bool KeyboardHandler::operator ()( EqEventInfo& eqEventInfo )
 
     RenderSettings& renderSettings = config->getFrameData().getRenderSettings();
     FrameSettings& frameSettings = config->getFrameData().getFrameSettings();
-    CameraSettings& cameraSettings = config->getFrameData().getCameraSettings();
 
     if( event.key >= '1' && event.key <= '9' )
     {
@@ -72,11 +70,6 @@ bool KeyboardHandler::operator ()( EqEventInfo& eqEventInfo )
         case ' ':
             forceUpdate_ = true;
             config->resetCamera( );
-            return true;
-
-        case 'r':
-            std::cout << cameraSettings.getCameraPosition()
-                      << cameraSettings.getCameraLookAt() << std::endl;
             return true;
 
         case 's':

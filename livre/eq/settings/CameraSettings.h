@@ -68,10 +68,15 @@ public:
     void setCameraLookAt( const Vector3f& lookAt );
 
     /**
+     * Sets the modelviewmatrix.
+     * @param modelviewMatrix
+     */
+    void setModelViewMatrix( const Matrix4f& modelViewMatrix );
+
+    /**
      * @return Returns model rotation matrix.
      */
     const Matrix4f& getModelRotation() const { return modelRotation_; }
-    const Vector3f& getCameraLookAt() const { return cameraLookAt_; }
 
     /**
      * @return Returns the camera position in x,y and z.
@@ -87,15 +92,8 @@ private:
     void serialize( co::DataOStream& os, const uint64_t dirtyBits ) final;
     void deserialize( co::DataIStream& is, const uint64_t dirtyBits ) final;
 
-    /**
-     * Sets the modelviewmatrix.
-     * @param modelviewMatrix
-     */
-    void setModelViewMatrix( const Matrix4f& modelViewMatrix );
-
     Matrix4f modelRotation_;
     Vector3f cameraPosition_;
-    Vector3f cameraLookAt_;
 };
 
 }

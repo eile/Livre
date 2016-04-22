@@ -104,7 +104,7 @@ public:
 
     void initializeFrame()
     {
-        channel->setNearFar( nearPlane, farPlane );
+        _channel->setNearFar( nearPlane, farPlane );
         _image.setAlphaUsage( true );
         _image.setInternalFormat( eq::Frame::BUFFER_COLOR,
                                   EQ_COMPRESSOR_DATATYPE_RGBA );
@@ -183,13 +183,9 @@ public:
         {
             const ConstTextureObjectPtr texture =
                 std::static_pointer_cast< const TextureObject >( cacheObject );
-
             const LODNode& lodNode =
-                boost::static_pointer_cast< const TextureObject >( cacheObject );
-            const LODNode& lodNode =
-                dashTree.getDataSource()->getNode( NodeId( cacheObject->getId( )));
-            renderBricks.push_back( RenderBrickPtr(
-                new RenderBrick( lodNode, texture->getTextureState( ))));
+                dashTree.getDataSource().getNode( NodeId( cacheObject->getId( )));
+            renderBricks.emplace_back( RenderBrick( lodNode, texture->getTextureState( )));
             nodeIds.push_back( lodNode.getNodeId( ));
         }
 
@@ -413,26 +409,22 @@ public:
             _frameInfo.allNodes.push_back(visible.getLODNode().getNodeId());
         generateSet.generateRenderingSet( _frameInfo );
 
-        EqRenderViewPtr renderView =
-                boost::static_pointer_cast< EqRenderView >( _renderViewPtr );
-        RayCastRendererPtr renderer =
-                boost::static_pointer_cast< RayCastRenderer >(
-                    renderView->getRenderer( ));
-
-        renderer->update( *pipe->getFrameData( ));
+        _renderer->update( *pipe->getFrameData( ));
         generateRenderSets( _frameInfo.renderNodes, _renderSets );
     }
 
     void frameDraw()
     {
         applyCamera();
-        EqRenderViewPtr renderView =
-            boost::static_pointer_cast< EqRenderView >( _renderViewPtr );
-        RenderBricks& bricks = _renderSets.back();
-        renderView->render( _frameInfo, bricks, *_glWidgetPtr );
+        const eq::PixelViewport& pvp = _channel->getPixelViewport();
+        const RenderBricks& bricks = _renderSets.back();
+        _renderer->render( _frustum,
+                           PixelViewport( pvp.x, pvp.y, pvp.w, pvp.h ),
+                           bricks );
         updateRegions( bricks );
         _renderSets.pop_back();
         _image.setContext( _channel->getContext( ));
+        freeTextures();
     }
 
     void applyCamera()
@@ -765,14 +757,15 @@ void Channel::frameStart( const eq::uint128_t& frameID,
 }
 
 bool Channel::frameRender( const eq::RenderContext& context,
-                           const eq::Frames& frames )
+                           const eq::Frames& inFrames,
+                           const eq::Frames& outFrames )
 {
     overrideContext( context );
     _impl->frameRender();
 
     bool hasAsyncReadback = false;
     while( !_impl->_renderSets.empty( ))
-        if( eq::Channel::frameRender( context, frames ))
+        if( eq::Channel::frameRender( context, inFrames, outFrames ))
             hasAsyncReadback = true;
     return hasAsyncReadback;
 }
