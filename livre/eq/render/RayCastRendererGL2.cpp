@@ -547,8 +547,8 @@ void RayCastRenderer::update( const FrameData& frameData )
 }
 
 
-NodeIds RayCastRenderer::_order( const NodeIds& bricks,
-                                 const Frustum& frustum ) const
+NodeIds RayCastRenderer::order( const NodeIds& bricks,
+                                const Frustum& frustum ) const
 {
     return _impl->order( bricks, frustum );
 }
