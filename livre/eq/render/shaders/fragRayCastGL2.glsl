@@ -11,11 +11,11 @@
 
 #define EARLY_EXIT 0.999
 #define EPSILON 0.0000000001f
-#define SH_UINT 0u
-#define SH_INT 1u
-#define SH_FLOAT 2u
+#define SH_UINT 0
+#define SH_INT 1
+#define SH_FLOAT 2
 
-uniform uint datatype;
+uniform int datatype;
 uniform sampler3D volumeTexFloat;
 uniform usampler3D volumeTexUint;
 uniform isampler3D volumeTexInt;

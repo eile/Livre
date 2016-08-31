@@ -42,9 +42,9 @@ namespace livre
 {
 namespace
 {
-const uint32_t SH_UINT  = 0u;
-const uint32_t SH_INT   = 1u;
-const uint32_t SH_FLOAT = 2u;
+const int32_t SH_UINT  = 0;
+const int32_t SH_INT   = 1;
+const int32_t SH_FLOAT = 2;
 }
 
 // Sort helper function for sorting the textures with their distances to viewpoint
@@ -169,6 +169,7 @@ struct RayCastRenderer::Impl
                        const ClipPlanes& planes,
                        const NodeIds& renderBricks )
     {
+        EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
         if( _nSamplesPerRay == 0 ) // Find sampling rate
         {
             uint32_t maxLOD = 0;
@@ -248,6 +249,7 @@ struct RayCastRenderer::Impl
         const size_t nPlanes = clipPlanes.size();
         tParamNameGL = glGetUniformLocation( program, "nClipPlanes" );
         glUniform1i( tParamNameGL, nPlanes );
+        EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
 
         switch( _dataSource.getVolumeInfo().dataType )
         {
@@ -255,17 +257,17 @@ struct RayCastRenderer::Impl
             case DT_UINT16:
             case DT_UINT32:
                 tParamNameGL = glGetUniformLocation( program, "datatype" );
-                glUniform1ui( tParamNameGL, SH_UINT );
+                glUniform1i( tParamNameGL, SH_UINT );
                 break;
             case DT_FLOAT:
                 tParamNameGL = glGetUniformLocation( program, "datatype" );
-                glUniform1ui( tParamNameGL, SH_FLOAT );
+                glUniform1i( tParamNameGL, SH_FLOAT );
                 break;
             case DT_INT8:
             case DT_INT16:
             case DT_INT32:
                 tParamNameGL = glGetUniformLocation( program, "datatype" );
-                glUniform1ui( tParamNameGL, SH_INT );
+                glUniform1i( tParamNameGL, SH_INT );
                 break;
             case DT_UNDEFINED:
             default:
@@ -300,6 +302,7 @@ struct RayCastRenderer::Impl
         glUseProgram( 0 );
 
         createAndFillVertexBuffer( renderBricks );
+        EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
     }
 
     void createAndFillVertexBuffer( const NodeIds& renderBricks )
@@ -383,6 +386,7 @@ struct RayCastRenderer::Impl
     void onFrameRender( const PixelViewport& view,
                         const NodeIds& bricks )
     {
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
         size_t index = 0;
         for( const NodeId& brick: bricks )
             renderBrick( view, brick, index++ );
@@ -399,16 +403,22 @@ struct RayCastRenderer::Impl
         else if( !front && back )
             glCullFace( GL_FRONT );
 
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
         glBindBuffer( GL_ARRAY_BUFFER, _posVBO );
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
         glEnableVertexAttribArray( 0 );
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
         glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 0, NULL );
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
         glDrawArrays( GL_TRIANGLES, index * 36, 36 );
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
     }
 
     void renderBrick( const PixelViewport& viewport,
                       const NodeId& rb,
                       const size_t index )
     {
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
         GLSLShaders::Handle program = _shaders.getProgram( );
         LBASSERT( program );
 
@@ -427,6 +437,7 @@ struct RayCastRenderer::Impl
             return;
         }
 
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
         GLint tParamNameGL = glGetUniformLocation( program, "aabbMin" );
         glUniform3fv( tParamNameGL, 1, lodNode.getWorldBox().getMin().array );
 
@@ -436,6 +447,7 @@ struct RayCastRenderer::Impl
         tParamNameGL = glGetUniformLocation( program, "textureMin" );
         glUniform3fv( tParamNameGL, 1, texState.textureCoordsMin.array );
 
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
         tParamNameGL = glGetUniformLocation( program, "textureMax" );
         glUniform3fv( tParamNameGL, 1, texState.textureCoordsMax.array );
 
@@ -443,6 +455,7 @@ struct RayCastRenderer::Impl
         tParamNameGL = glGetUniformLocation( program, "voxelSpacePerWorldSpace" );
         glUniform3fv( tParamNameGL, 1, voxSize.array );
 
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
         readFromFrameBuffer( viewport );
 
         glActiveTexture( GL_TEXTURE2 );
@@ -452,6 +465,7 @@ struct RayCastRenderer::Impl
 
         tParamNameGL = glGetUniformLocation( program, "frameBufferTex" );
         glUniform1i( tParamNameGL, 2 );
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
 
         glActiveTexture( GL_TEXTURE1 );
         glBindTexture( GL_TEXTURE_1D, _transferFunctionTexture ); //preintegrated values
@@ -462,6 +476,7 @@ struct RayCastRenderer::Impl
         texState.bind();
         tParamNameGL = glGetUniformLocation( program, "volumeTexUint8" );
         glUniform1i( tParamNameGL, 0 );
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
 
         tParamNameGL = glGetUniformLocation( program, "volumeTexFloat" );
         glUniform1i( tParamNameGL, 0 );
@@ -470,12 +485,16 @@ struct RayCastRenderer::Impl
 
         tParamNameGL = glGetUniformLocation( program, "refLevel" );
         glUniform1i( tParamNameGL, refLevel );
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
 
         _usedTextures[1].push_back( texState.textureId );
 
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
         renderVBO( index, false /* draw front */, true /* cull back */ );
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
 
         glUseProgram( 0 );
+    EQ_GL_ERROR( "before Texture::copyFromFrameBuffer" );
     }
 
     void onFrameEnd()
