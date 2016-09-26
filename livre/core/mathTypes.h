@@ -24,6 +24,7 @@
 
 #include <livre/core/types.h>
 #include <vmmlib/types.hpp>
+#include <vmmlib/matrix.hpp>
 #include <vmmlib/vector.hpp> // inline constants
 
 namespace livre
@@ -79,8 +80,13 @@ typedef vmml::Vector4f Viewport;
 /**
   * Definitions
   */
-const Vector2ui INVALID_FRAME_RANGE( INVALID_FRAME );
-const Vector2ui FULL_FRAME_RANGE( 0, INVALID_FRAME );
+const Vector2ui INVALID_FRAME_RANGE( INVALID_TIMESTEP );
+const Vector2ui FULL_FRAME_RANGE( 0, INVALID_TIMESTEP );
+
+/**
+ * Vector definitions
+ */
+typedef std::vector< Vector3f > Vector3fs;
 
 }
 

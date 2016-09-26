@@ -22,28 +22,21 @@
 #define _livreTypes_h_
 
 #include <livre/core/types.h>
-#include <livre/lib/configuration/VolumeRendererParameters.h>
 
 namespace livre
 {
 
-class DataUploadProcessor;
-class RenderNodeVisitor;
-class TextureCache;
-class TextureDataCache;
-class TextureDataObject;
+class HistogramObject;
+class RenderPipeline;
+class DataObject;
 class TextureObject;
-class TextureUploadProcessor;
+class VolumeRendererParameters;
+
 struct ApplicationParameters;
 
-typedef std::shared_ptr< const TextureDataObject > ConstTextureDataObjectPtr;
+typedef std::shared_ptr< const DataObject > ConstDataObjectPtr;
 typedef std::shared_ptr< const TextureObject > ConstTextureObjectPtr;
-typedef std::shared_ptr< TextureDataObject > TextureDataObjectPtr;
-typedef std::shared_ptr< TextureObject > TextureObjectPtr;
-
-static const uint32_t CONNECTION_ID( 0u );
-
-typedef std::vector< DashRenderNode > DashRenderNodes;
+typedef std::shared_ptr< const HistogramObject > ConstHistogramObjectPtr;
 
 }
 

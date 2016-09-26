@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, EPFL/Blue Brain Project
+/* Copyright (c) 2011-2016, EPFL/Blue Brain Project
  *                          Jafet Villafranca <jafet.villafrancadiaz@epfl.ch>
  *                          Raphael Dumusc <raphael.dumusc@epfl.ch>
  *
@@ -22,6 +22,7 @@
 #include <livreGUI/ui_MainWindow.h>
 
 #include "animationController/AnimationController.h"
+#include "clipPlanesController/ClipPlanesController.h"
 #include "progress/Progress.h"
 #include "renderParametersController/RenderParametersController.h"
 #include "transferFunctionEditor/TransferFunctionEditor.h"
@@ -58,6 +59,8 @@ struct MainWindow::Impl
         if( !_ui.simulationDockWidget->isHidden( ))
             parent->tabifyDockWidget( _ui.simulationDockWidget,
                                       _ui.renderParametersDockWidget);
+
+        _ui.clipPlanesDockWidget->setWidget( new ClipPlanesController( controller ));
     }
 
     ~Impl(){}

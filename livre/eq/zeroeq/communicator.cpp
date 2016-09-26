@@ -26,24 +26,22 @@
 #include <livre/eq/settings/CameraSettings.h>
 #include <livre/eq/settings/FrameSettings.h>
 #include <livre/eq/settings/RenderSettings.h>
+#include <livre/eq/settings/VolumeSettings.h>
 
 #include <livre/lib/configuration/ApplicationParameters.h>
 #include <livre/lib/configuration/VolumeRendererParameters.h>
 
-#include <lunchbox/clock.h>
-#include <servus/uri.h>
-#include <zeroeq/zeroeq.h>
-#include <zeroeq/hbp/hbp.h>
+#include <livre/core/data/VolumeInformation.h>
+#include <livre/core/data/Histogram.h>
+#include <livre/core/data/DataSource.h>
 
-#ifdef LIVRE_USE_RESTBRIDGE
-#  include <restbridge/RestBridge.h>
-#endif
+#include <lexis/lexis.h>
+#include <zeroeq/zeroeq.h>
+#include <lunchbox/clock.h>
 
 #include <functional>
 #include <map>
 #include <unordered_map>
-
-#define DEFAULT_HEARTBEAT_TIME 1000.0f
 
 namespace livre
 {
@@ -55,300 +53,231 @@ public:
     Impl( Config& config, const int argc, char** argv )
         : _config( config )
     {
+        const lunchbox::URI& uri =
+                lunchbox::URI( _config.getFrameData().getVolumeSettings().getURI( ));
+        _volumeInfo = DataSource::getVolumeInfo( uri );
+
         if( !servus::Servus::isAvailable( ))
             return;
 
-        _setupPublisher();
         _setupRequests();
-        _setupRESTBridge( argc, argv );
-        _setupSubscribers();
+        _setupSubscriber();
+        _setupHTTPServer( argc, argv );
     }
 
-    void publishModelView( const Matrix4f& modelView )
+    bool publishFrame()
     {
-        if( !_publisher )
-            return;
-
-        const Floats matrix( modelView.data(), modelView.data() + 16 );
-        _publisher->publish( ::zeroeq::hbp::serializeCamera( matrix ));
-    }
-
-    void publishCamera()
-    {
-        if( !_publisher )
-            return;
-
-        const auto& cameraSettings = _getFrameData().getCameraSettings();
-        const Matrix4f& modelView = cameraSettings.getModelViewMatrix();
-        const Floats matrix( modelView.data(), modelView.data() + 16 );
-        _publisher->publish( ::zeroeq::hbp::serializeCamera( matrix ));
-    }
-
-    void publishExit()
-    {
-        if( !_publisher )
-            return;
-
-        _publisher->publish( ::zeroeq::Event( ::zeroeq::vocabulary::EVENT_EXIT ));
-    }
-
-    void publishLookupTable1D()
-    {
-        if( !_publisher )
-            return;
-
-        const auto& renderSettings = _getFrameData().getRenderSettings();
-        const auto& lut = renderSettings.getTransferFunction().getData();
-        _publisher->publish( ::zeroeq::hbp::serializeLookupTable1D( lut ) );
-    }
-
-    void publishFrame()
-    {
-        if( !_publisher )
-            return;
-
         const auto& frameSettings = _getFrameData().getFrameSettings();
         const auto& params = _config.getApplicationParameters();
 
-        const ::zeroeq::Event& frame = ::zeroeq::hbp::serializeFrame(
-                                        ::zeroeq::hbp::data::Frame(
-                                            params.frames[0],
-                                            frameSettings.getFrameNumber(),
-                                            params.frames[1],
-                                            params.animation ));
-        _publisher->publish( frame );
+        _frame.setStart( params.frames[0] );
+        _frame.setCurrent( frameSettings.getFrameNumber( ));
+        _frame.setEnd( params.frames[1] );
+        _frame.setDelta( params.animation );
+
+        return _publisher.publish( _frame );
+    }
+    ::lexis::render::LookOut _getLookOut( const Matrix4f& livreModelView )
+    {
+        // this computation does not work if spaces are rotated in respect to each other.
+        Matrix4f rotation;
+        rotation.setSubMatrix< 3, 3 >( livreModelView.getSubMatrix< 3, 3 >( 0, 0 ), 0, 0 );
+
+        Vector4f translation = livreModelView.getColumn( 3 );
+
+        translation = -rotation.inverse() * translation;
+        translation[3] = 1.0f;
+
+        translation = -rotation * _volumeInfo.dataToLivreTransform.inverse() * translation;
+        translation *= ( 1.0f / _volumeInfo.meterToDataUnitRatio );
+        translation[3] = 1.0f;
+
+        Matrix4f networkModelView;
+        networkModelView.setSubMatrix< 3, 3 >( rotation.getSubMatrix< 3, 3 >( 0, 0 ), 0, 0 );
+        networkModelView.setColumn( 3, translation );
+
+        ::lexis::render::LookOut lookOut;
+
+        std::copy( &networkModelView.array[0], &networkModelView.array[0] + 16,
+                   lookOut.getMatrix( ));
+        return lookOut;
     }
 
-    void publishVolumeRendererParameters()
+    bool publishCamera( const Matrix4f& livreModelview )
     {
-         _publisher->publish( _getFrameData().getVRParameters( ));
+        return _publisher.publish( _getLookOut( livreModelview ));
     }
 
-    void publishVocabulary()
+    void onCamera( const ::lexis::render::LookOut& lookOut )
     {
-        if( !_publisher )
-            return;
+        // this computation does not work if spaces are rotated in respect to each other.
+        float matrixValues[16];
+        std::copy( lookOut.getMatrix(), lookOut.getMatrix() + 16, matrixValues );
 
-        ::zeroeq::EventDescriptors vocabulary;
-        vocabulary.push_back(
-                    ::zeroeq::EventDescriptor( ::zeroeq::hbp::IMAGEJPEG,
-                                               ::zeroeq::hbp::EVENT_IMAGEJPEG,
-                                               ::zeroeq::hbp::SCHEMA_IMAGEJPEG,
-                                               ::zeroeq::PUBLISHER ));
-        vocabulary.push_back(
-                    ::zeroeq::EventDescriptor( ::zeroeq::hbp::CAMERA,
-                                               ::zeroeq::hbp::EVENT_CAMERA,
-                                               ::zeroeq::hbp::SCHEMA_CAMERA,
-                                               ::zeroeq::BIDIRECTIONAL ));
-        vocabulary.push_back(
-                    ::zeroeq::EventDescriptor( ::zeroeq::vocabulary::EXIT,
-                                               ::zeroeq::vocabulary::EVENT_EXIT,
-                                               ::zeroeq::vocabulary::SCHEMA_EXIT,
-                                               ::zeroeq::PUBLISHER ));
-        vocabulary.push_back(
-                    ::zeroeq::EventDescriptor( ::zeroeq::hbp::LOOKUPTABLE1D,
-                                               ::zeroeq::hbp::EVENT_LOOKUPTABLE1D,
-                                               ::zeroeq::hbp::SCHEMA_LOOKUPTABLE1D,
-                                               ::zeroeq::BIDIRECTIONAL ));
-        vocabulary.push_back(
-                    ::zeroeq::EventDescriptor( ::zeroeq::hbp::FRAME,
-                                               ::zeroeq::hbp::EVENT_FRAME,
-                                               ::zeroeq::hbp::SCHEMA_FRAME,
-                                               ::zeroeq::BIDIRECTIONAL ));
-        const auto& event = ::zeroeq::vocabulary::serializeVocabulary( vocabulary );
-        _publisher->publish( event );
+        Matrix4f networkModelView( &matrixValues[0], &matrixValues[0] + 16 );
+
+        Vector4f translation = networkModelView.getColumn( 3 );
+        Matrix4f rotation;
+        rotation.setSubMatrix< 3, 3 >( networkModelView.getSubMatrix< 3, 3 >( 0, 0 ), 0, 0 );
+
+        translation = -rotation.inverse() * translation;
+        translation *= _volumeInfo.meterToDataUnitRatio;
+        translation[3] = 1.0f;
+
+        translation = -rotation * _volumeInfo.dataToLivreTransform * translation;
+        translation[3] = 1.0f;
+
+        Matrix4f livreModelView;
+        livreModelView.setSubMatrix< 3, 3 >( rotation.getSubMatrix< 3, 3 >( 0, 0 ), 0, 0 );
+        livreModelView.setColumn( 3, translation );
+
+        _getFrameData().getCameraSettings().setModelViewMatrix( livreModelView );
     }
 
-    void publishHeartbeat()
+    bool publishHistogram( const Histogram& histogram )
     {
-        if( !_publisher )
-            return;
-
-        if( _heartbeatClock.getTimef() >= DEFAULT_HEARTBEAT_TIME )
-        {
-            _heartbeatClock.reset();
-            _publisher->publish(
-                ::zeroeq::Event( ::zeroeq::vocabulary::EVENT_HEARTBEAT ));
-        }
+        return _publisher.publish( histogram );
     }
 
-    void publishImageJPEG( const uint8_t* data, const uint64_t size )
+    bool frameDirty()
     {
-        if( !_publisher )
-            return;
-
-        const ::zeroeq::hbp::data::ImageJPEG image( size, data );
-        const auto& event = ::zeroeq::hbp::serializeImageJPEG( image );
-        _publisher->publish( event );
+        const auto& frameSettings = _getFrameData().getFrameSettings();
+        const auto& params = _config.getApplicationParameters();
+        return _frame.getCurrent() != frameSettings.getFrameNumber() ||
+               _frame.getDelta() != params.animation ||
+               _frame.getStart() != params.frames.x() ||
+               _frame.getEnd() != params.frames.y();
     }
 
-    void onRequest( const ::zeroeq::Event& event )
+    bool onRequest( ::lexis::ConstRequestPtr request )
     {
-        const auto& eventType = ::zeroeq::vocabulary::deserializeRequest( event );
-        const auto& i = _requests.find( eventType );
-        if( i != _requests.end( ))
-            i->second();
+        const auto& i = _requests.find( request->getEvent( ));
+        if( i == _requests.end( ))
+            return false;
+        return i->second();
     }
 
-    // Generic camera (from REST) in meters
-    void onCamera( const ::zeroeq::Event& event )
+    void updateFrame()
     {
-        const auto& matrix = ::zeroeq::hbp::deserializeCamera( event );
-        const Matrix4f modelViewMatrix( matrix );
-        auto& cameraSettings = _getFrameData().getCameraSettings();
-        cameraSettings.setModelViewMatrix( modelViewMatrix );
-    }
-
-    // HBP 'micron' camera from other brain applications
-    void onHBPCamera( const ::zeroeq::Event& event )
-    {
-        const auto& matrix = ::zeroeq::hbp::deserializeCamera( event );
-        const Matrix4f modelViewMatrixMicron( matrix );
-
-        const auto& modelViewMatrix =
-                _config.convertFromHBPCamera( modelViewMatrixMicron );
-        auto& cameraSettings = _getFrameData().getCameraSettings();
-        cameraSettings.setModelViewMatrix( modelViewMatrix );
-    }
-
-    void onLookupTable1D( const ::zeroeq::Event& event )
-    {
-        const TransferFunction1D transferFunction(
-            ::zeroeq::hbp::deserializeLookupTable1D( event ));
-        auto& renderSettings = _getRenderSettings();
-        renderSettings.setTransferFunction( transferFunction );
-    }
-
-    void onFrame( const ::zeroeq::Event& event )
-    {
-        const auto& frame = ::zeroeq::hbp::deserializeFrame( event );
-
         if( _config.getDataFrameCount() == 0 )
             return;
 
-        auto& frameSettings = _getFrameData().getFrameSettings();
+        auto& frameSettings = _config.getFrameData().getFrameSettings();
         auto& params = _config.getApplicationParameters();
 
-        if( frame.current == frameSettings.getFrameNumber() &&
-            frame.delta == params.animation &&
-            frame.start == params.frames.x() &&
-            frame.end == params.frames.y( ))
+        if( _frame.getCurrent() == frameSettings.getFrameNumber() &&
+            _frame.getDelta() == params.animation &&
+            _frame.getStart() == params.frames.x() &&
+            _frame.getEnd() == params.frames.y( ))
         {
             return;
         }
 
-        frameSettings.setFrameNumber( frame.current );
-        params.animation = frame.delta;
-        params.frames = { frame.start, frame.end };
+        frameSettings.setFrameNumber( _frame.getCurrent() );
+        params.animation = _frame.getDelta();
+        params.frames = { _frame.getStart(), _frame.getEnd() };
     }
 
-    void requestImageJPEG()
-    {
-        _getFrameData().getFrameSettings().setGrabFrame( true );
-    }
-
-    void requestExit()
+    bool requestExit()
     {
         _config.stopRunning();
+        return true;
     }
 
     void handleEvents()
     {
-        // Receiving all queued events from all receivers without blocking.
-        for( auto subscriber : subscribers )
-            while( subscriber->receive( 0 ))
-                _config.sendEvent( REDRAW );
+        while( _subscriber.receive( 0 ))
+            _config.sendEvent( REDRAW );
     }
 
 private:
-    void _setupPublisher()
-    {
-        _publisher.reset( new ::zeroeq::Publisher );
-    }
+    ::zeroeq::Subscriber _subscriber;
+    ::zeroeq::Publisher _publisher;
+    lunchbox::Clock _heartbeatClock;
+    typedef std::function< bool() > RequestFunc;
+    typedef std::map< ::zeroeq::uint128_t, RequestFunc > RequestFuncs;
+    RequestFuncs _requests;
+#ifdef ZEROEQ_USE_HTTPXX
+    std::unique_ptr< ::zeroeq::http::Server > _httpServer;
+#endif
+    ::lexis::render::Frame _frame;
+    livre::VolumeInformation _volumeInfo;
+    Config& _config;
 
     void _setupRequests()
     {
-        _requests[::zeroeq::hbp::EVENT_CAMERA] =
-            std::bind( &Impl::publishCamera, this );
-        _requests[::zeroeq::hbp::EVENT_FRAME] =
-            std::bind( &Impl::publishFrame, this );
-        _requests[::zeroeq::hbp::EVENT_LOOKUPTABLE1D] =
-            std::bind( &Impl::publishLookupTable1D, this );
-        _requests[::zeroeq::hbp::EVENT_IMAGEJPEG] =
-            std::bind( &Impl::requestImageJPEG, this );
-        _requests[::zeroeq::vocabulary::EVENT_EXIT] =
-            std::bind( &Impl::requestExit, this );
-        const auto& renderParams = _getFrameData().getVRParameters();
-        _requests[ renderParams.getTypeIdentifier( )] = [&]
-            { _publisher->publish( _getFrameData().getVRParameters( )); };
+        _requests[ _frame.getTypeIdentifier() ] = [&]{ return publishFrame(); };
+        _requests[ _getFrameData().getVRParameters().getTypeIdentifier( )] = [&]
+            { return _publisher.publish( _getFrameData().getVRParameters( )); };
+        _requests[ ::lexis::render::LookOut::ZEROBUF_TYPE_IDENTIFIER()] = [&]
+            { return publishCamera( _getFrameData().getCameraSettings().getModelViewMatrix( )); };
+        _requests[ _getRenderSettings().getTransferFunction().getTypeIdentifier( )] = [&]
+            { return _publisher.publish( _getRenderSettings().getTransferFunction( )); };
+        _requests[ _getRenderSettings().getClipPlanes().getTypeIdentifier( )] = [&]
+            { return _publisher.publish( _getRenderSettings().getClipPlanes( )); };
     }
 
-    void _setupRESTBridge( const int argc LB_UNUSED, char** argv LB_UNUSED )
+    void _setupHTTPServer( const int argc LB_UNUSED, char** argv LB_UNUSED )
     {
-#ifdef LIVRE_USE_RESTBRIDGE
-        _restBridge = restbridge::RestBridge::parse( *_publisher, argc, argv );
-        if( !_restBridge )
+#ifdef ZEROEQ_USE_HTTPXX
+        _httpServer = ::zeroeq::http::Server::parse( argc, argv, _subscriber );
+
+        if( !_httpServer )
             return;
 
-        SubscriberPtr subscriber(
-            new ::zeroeq::Subscriber( _restBridge->getSubscriberURI( )));
-        subscribers.push_back( subscriber );
-        subscriber->registerHandler( ::zeroeq::hbp::EVENT_CAMERA,
-                                        std::bind( &Impl::onCamera, this,
-                                                   std::placeholders::_1 ));
-        subscriber->registerHandler( ::zeroeq::vocabulary::EVENT_REQUEST,
-                                        std::bind( &Impl::onRequest, this,
-                                                   std::placeholders::_1 ));
-        subscriber->registerHandler( ::zeroeq::hbp::EVENT_FRAME,
-                                        std::bind( &Impl::onFrame, this,
-                                                   std::placeholders::_1 ));
-        subscriber->registerHandler( ::zeroeq::hbp::EVENT_LOOKUPTABLE1D,
-                                        std::bind( &Impl::onLookupTable1D, this,
-                                                   std::placeholders::_1 ));
+        _httpServer->subscribe( ::lexis::render::Exit::ZEROBUF_TYPE_NAME(),
+                                [&] { return requestExit(); } );
+
+        _httpServer->register_( ::lexis::render::ImageJPEG::ZEROBUF_TYPE_NAME(),
+                                [&](){ return _config.renderJPEG(); });
+
+        _httpServer->subscribe( ::lexis::render::LookOut::ZEROBUF_TYPE_NAME(),
+                                [&]( const std::string& json )
+                                {
+                                    ::lexis::render::LookOut lookOut;
+                                    if( !lookOut.fromJSON( json ))
+                                        return false;
+
+                                    onCamera( lookOut );
+                                    return true;
+                                });
+
+        _httpServer->register_( ::lexis::render::LookOut::ZEROBUF_TYPE_NAME(),
+                                [&](){ return _getLookOut( _getFrameData().getCameraSettings().getModelViewMatrix( )).toJSON(); });
+
+        _httpServer->add( _frame );
+        _httpServer->add( _getFrameData().getVRParameters( ));
+        _httpServer->add( _getRenderSettings().getTransferFunction( ));
+        _httpServer->add( _getRenderSettings().getClipPlanes( ));
 #endif
     }
 
-    void _setupSubscribers()
+    void _setupSubscriber()
     {
-        SubscriberPtr subscriber( new ::zeroeq::Subscriber );
+        _subscriber.subscribe( ::lexis::Request::ZEROBUF_TYPE_IDENTIFIER(),
+            [&]( const void* data, const size_t size )
+            {
+                onRequest( ::lexis::Request::create( data, size ));
+            });
 
-        subscribers.push_back( subscriber );
-        subscriber->registerHandler( ::zeroeq::hbp::EVENT_CAMERA,
-                                     std::bind( &Impl::onHBPCamera,
-                                                this, std::placeholders::_1 ));
-        subscriber->registerHandler( ::zeroeq::hbp::EVENT_LOOKUPTABLE1D,
-                                     std::bind( &Impl::onLookupTable1D,
-                                                this, std::placeholders::_1 ));
-        subscriber->registerHandler( ::zeroeq::hbp::EVENT_FRAME,
-                                     std::bind( &Impl::onFrame,
-                                                 this, std::placeholders::_1 ));
-        subscriber->registerHandler( ::zeroeq::vocabulary::EVENT_REQUEST,
-                                     std::bind( &Impl::onRequest,
-                                                this, std::placeholders::_1 ));
-        subscriber->subscribe( _getFrameData().getVRParameters( ));
+        _subscriber.subscribe( ::lexis::render::LookOut::ZEROBUF_TYPE_IDENTIFIER(),
+            [&]( const void* data, const size_t size )
+            {
+                onCamera( *::lexis::render::LookOut::create( data, size ));
+            });
+
+        _frame.registerDeserializedCallback( [&] { updateFrame(); });
+        _subscriber.subscribe( _frame );
+
+        _subscriber.subscribe( _getFrameData().getVRParameters( ));
+        _subscriber.subscribe( _getRenderSettings().getTransferFunction( ));
+        _subscriber.subscribe( _getRenderSettings().getClipPlanes( ));
     }
 
     FrameData& _getFrameData() { return _config.getFrameData(); }
     const FrameData& _getFrameData() const { return _config.getFrameData(); }
-    RenderSettings& _getRenderSettings()
-        { return _getFrameData().getRenderSettings(); }
-    const RenderSettings& _getRenderSettings() const
-        { return _getFrameData().getRenderSettings(); }
-
-    typedef std::shared_ptr< ::zeroeq::Subscriber > SubscriberPtr;
-    typedef std::shared_ptr< ::zeroeq::Publisher > PublisherPtr;
-    typedef std::vector< SubscriberPtr > Subscribers;
-
-    Subscribers subscribers;
-    PublisherPtr _publisher;
-    lunchbox::Clock _heartbeatClock;
-    typedef std::function< void() > RequestFunc;
-    typedef std::map< ::zeroeq::uint128_t, RequestFunc > RequestFuncs;
-    RequestFuncs _requests;
-#ifdef LIVRE_USE_RESTBRIDGE
-    std::unique_ptr< restbridge::RestBridge > _restBridge;
-#endif
-    Config& _config;
+    RenderSettings& _getRenderSettings() { return _getFrameData().getRenderSettings(); }
+    const RenderSettings& _getRenderSettings() const { return _getFrameData().getRenderSettings(); }
 };
 
 Communicator::Communicator( Config& config, const int argc, char* argv[] )
@@ -360,29 +289,20 @@ Communicator::~Communicator()
 {
 }
 
-void Communicator::publishImageJPEG( const uint8_t* data, const uint64_t size )
-{
-    _impl->publishImageJPEG( data, size );
-}
-
-void Communicator::publishModelView( const Matrix4f& modelView )
-{
-    _impl->publishModelView( modelView );
-}
-
-void Communicator::publishHeartbeat()
-{
-    _impl->publishHeartbeat();
-}
-
-void Communicator::publishExit()
-{
-    _impl->publishExit();
-}
-
 void Communicator::publishFrame()
 {
-    _impl->publishFrame();
+    if( _impl->frameDirty( ))
+        _impl->publishFrame();
+}
+
+bool Communicator::publishHistogram( const Histogram& histogram )
+{
+    return _impl->publishHistogram( histogram );
+}
+
+void Communicator::publishCamera( const Matrix4f& modelview )
+{
+    _impl->publishCamera( modelview );
 }
 
 void Communicator::handleEvents()

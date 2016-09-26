@@ -40,27 +40,20 @@ public:
     /** @param parent The pipe that owns the window. */
     LIVREEQ_API Window( eq::Pipe* parent );
 
-    /** Commits changes. */
-    void commit();
+    /** @return The texture cache. */
+    Cache& getTextureCache();
 
-    /**
-     * Applies all the changes to the context.
-     * @param wait if true blocks until changes are applied to the current context
-     * @return true if any change is applied to the current context
-     */
-    bool apply( bool wait);
+    /** @return The texture cache. */
+    const Cache& getTextureCache() const;
 
-    /** @return The texture data cache. */
-    const TextureCache& getTextureCache() const;
+    /** @return The rendering pipeline. */
+    const RenderPipeline& getRenderPipeline() const;
 
 private:
 
     bool configInit( const eq::uint128_t& initId ) final;
-    bool configExit() final;
     bool configInitGL( const eq::uint128_t& initId ) final;
     bool configExitGL() final;
-    void frameStart( const eq::uint128_t& frameID,
-                     const uint32_t frameNumber ) final;
 
     struct Impl;
     std::unique_ptr< Impl > _impl;

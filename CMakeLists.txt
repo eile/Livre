@@ -10,11 +10,11 @@
 
 
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
-project(Livre VERSION 0.5.0)
-set(Livre_VERSION_ABI 4)
+project(Livre VERSION 0.7.0)
+set(Livre_VERSION_ABI 5)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake
-  ${CMAKE_SOURCE_DIR}/CMake/common)
+                              ${CMAKE_SOURCE_DIR}/CMake/common)
 
 include(GitExternal)
 
@@ -43,9 +43,8 @@ common_find_package(BBPTestData)
 common_find_package(Boost REQUIRED COMPONENTS filesystem program_options thread
                                          system regex unit_test_framework)
 common_find_package(Collage REQUIRED)
-common_find_package(dash REQUIRED)
 common_find_package(Equalizer REQUIRED)
-common_find_package(FlatBuffers)
+common_find_package(Lexis REQUIRED)
 common_find_package(LibJpegTurbo)
 common_find_package(Lunchbox REQUIRED)
 common_find_package(Monsteer)
@@ -59,16 +58,10 @@ common_find_package(Tuvok)
 common_find_package(VTune)
 common_find_package(ZeroEQ)
 common_find_package(ZeroBuf REQUIRED)
-
-if(ZEROEQ_FOUND AND FlatBuffers_FOUND)
-  list(APPEND COMMON_FIND_PACKAGE_DEFINES LIVRE_USE_REMOTE_DATASOURCE)
-  set(LIVRE_USE_REMOTE_DATASOURCE 1)
-endif()
-
 common_find_package_post()
 
 include(EqGLLibraries)
-set(LIVRE_DEPENDENT_LIBRARIES vmmlib Lunchbox dash Equalizer ZeroBuf)
+set(LIVRE_DEPENDENT_LIBRARIES vmmlib Lunchbox Equalizer ZeroBuf)
 
 add_definitions(-DBOOST_PROGRAM_OPTIONS_DYN_LINK) # Fix for windows and shared boost.
 add_subdirectory(livre)

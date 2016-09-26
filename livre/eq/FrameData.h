@@ -106,14 +106,14 @@ public:
      * @param config eq Config.
      * @return True if registration is successful.
      */
-    bool registerToConfig_( eq::Config *config );
+    bool registerToConfig( eq::Config *config );
 
     /**
      * Deregisters frame data from config.
      * @param config eq Config.
      * @return True if deregistration is successful.
      */
-    bool deregisterFromConfig_( eq::Config *config );
+    bool deregisterFromConfig( eq::Config *config );
 
     /**
      * @return The frame settings.
@@ -137,6 +137,7 @@ public:
      * @return The volume settings.
      */
     VolumeSettings& getVolumeSettings();
+    const VolumeSettings& getVolumeSettings() const;
 
     /**
      * @return The volume rendering parameters.

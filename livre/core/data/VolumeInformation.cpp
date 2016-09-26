@@ -30,12 +30,11 @@ VolumeInformation::VolumeInformation()
     , dataType( DT_UINT8 )
     , overlap( 0u )
     , maximumBlockSize( 0u )
-    , minPos( 0.0f )
-    , maxPos( 0.0f )
     , voxels( 256u )
     , worldSize( 0.0f )
-    , boundingBox( Boxf::makeUnitBox( ))
+    , resolution( Vector3f( -1.0f, -1.0f, -1.0f ))
     , worldSpacePerVoxel( 0.0f )
+    , meterToDataUnitRatio( 1.0f )
     , frameRange( INVALID_FRAME_RANGE )
 {}
 
@@ -43,9 +42,7 @@ size_t VolumeInformation::getBytesPerVoxel() const
 {
     switch( dataType )
     {
-    case DT_FLOAT64:
-        return 8;
-    case DT_FLOAT32:
+    case DT_FLOAT:
     case DT_UINT32:
     case DT_INT32:
         return 4;

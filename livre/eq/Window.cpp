@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2015, Stefan Eilemann <eile@equalizergraphics.com>
+/* Copyright (c) 2007-2016, Stefan Eilemann <eile@equalizergraphics.com>
  *                          Maxim Makhinya  <maxmah@gmail.com>
  *                          Ahmet Bilgili   <ahmet.bilgili@epfl.ch>
  *                          Daniel Nachbaur <daniel.nachbaur@epfl.ch>
@@ -31,56 +31,23 @@
 #include <livre/eq/render/EqContext.h>
 #include <livre/eq/settings/FrameSettings.h>
 
-#include <livre/core/dash/DashTree.h>
-#include <livre/core/dashpipeline/DashConnection.h>
-#include <livre/core/dashpipeline/DashProcessor.h>
-#include <livre/core/dashpipeline/DashProcessorInput.h>
-#include <livre/core/dashpipeline/DashProcessorOutput.h>
-
 #include <livre/lib/configuration/VolumeRendererParameters.h>
+#include <livre/lib/pipeline/RenderPipeline.h>
+#include <livre/lib/cache/TextureObject.h>
 
-#include <livre/lib/uploaders/DataUploadProcessor.h>
-#include <livre/lib/uploaders/TextureUploadProcessor.h>
+#include <livre/core/cache/Cache.h>
+#include <livre/core/render/TexturePool.h>
 
 #include <eq/gl.h>
 
-const uint32_t maxQueueSize = 65536;
-
 namespace livre
 {
-
-class EqTextureUploadProcessor : public TextureUploadProcessor
-{
-public:
-    EqTextureUploadProcessor( Config& config,
-                              DashTree& dashTree,
-                              GLContextPtr shareContext,
-                              TextureDataCache& dataCache,
-                              const VolumeRendererParameters& parameters )
-        : TextureUploadProcessor( dashTree, shareContext,
-                                  dataCache, parameters )
-        , _config( config )
-    {}
-
-    void onPostCommit_( uint32_t connection LB_UNUSED, CommitState state ) final
-    {
-        if( state != CommitState::CS_NOCHANGE )
-            glFinish();
-
-        if( needRedraw( ))
-            _config.sendEvent( REDRAW );
-    }
-
-private:
-    Config& _config;
-};
 
 struct Window::Impl
 {
 public:
     explicit Impl( Window* window )
         : _window( window )
-        , _dashProcessor( new DashProcessor( ))
     {}
 
     void configInitGL()
@@ -88,147 +55,49 @@ public:
         _glContext.reset( new EqContext( _window ));
     }
 
+    bool configExitGL()
+    {
+        _glContext->doneCurrent();
+        _glContext.reset();
+        _textureCache->purge();
+        return true;
+    }
+
     void configInit()
     {
-        initializePipelineProcessors();
-        initializePipelineConnections();
-        startUploadProcessors();
+        shareGLContexts();
+
+        Node* node = static_cast< Node* >( _window->getNode( ));
+        Pipe* pipe = static_cast< Pipe* >( _window->getPipe( ));
+        const size_t maxGpuMemory =
+                        pipe->getFrameData()->getVRParameters().getMaxGPUCacheMemoryMB();
+
+        _texturePool.reset( new TexturePool( node->getDataSource( )));
+        _textureCache.reset( new CacheT< TextureObject >( "TextureCache", maxGpuMemory * LB_1MB ));
+        Caches caches = { node->getDataCache(), *_textureCache, node->getHistogramCache() };
+        _renderPipeline.reset( new RenderPipeline( node->getDataSource(),
+                                                   caches,
+                                                   *_texturePool,
+                                                   _glContext ));
     }
 
-    void configExitGL()
-    {
-        // if we are the last window of a share group, release the processors
-        LBASSERT( _dataUploader.use_count() == _textureUploader.use_count( ));
-        if( !_dataUploader.unique() || !_dashProcessor->getDashContext( ))
-            return;
-
-        stopUploadProcessors();
-    }
-
-    void configExit()
-    {
-        // If it did not arrive at the frameStart, the current context should
-        // be set correctly.
-        _dashProcessor->getDashContext()->setCurrent();
-        livre::Node* node = static_cast< livre::Node* >( _window->getNode( ));
-        node->getDashTree().getRenderStatus().setThreadOp( TO_EXIT );
-    }
-
-    void frameStart()
-    {
-        _dashProcessor->getDashContext()->setCurrent();
-        livre::Node* node = static_cast< livre::Node* >( _window->getNode( ));
-        DashRenderStatus& renderStatus = node->getDashTree().getRenderStatus();
-
-        const Pipe* pipe = static_cast< Pipe* >( _window->getPipe( ));
-        const uint32_t frame =
-                pipe->getFrameData()->getFrameSettings().getFrameNumber();
-        renderStatus.setFrameID( frame );
-    }
-
-    void startUploadProcessors()
-    {
-#ifdef _MSC_VER
-        // https://www.opengl.org/discussion_boards/showthread.php/152648-wglShareLists-failing
-        LBCHECK( wglMakeCurrent( 0,0 ));
-#endif
-        if( !_textureUploader->isRunning( ))
-            _textureUploader->start();
-
-        if( !_dataUploader->isRunning( ))
-            _dataUploader->start();
-#ifdef _MSC_VER
-        _window->makeCurrent( false );
-#endif
-    }
-
-    void stopUploadProcessors()
-    {
-        commit();
-        _textureUploader->join();
-        _dataUploader->join();
-    }
-
-    void commit()
-    {
-        _dashProcessor->getProcessorOutput_()->commit( CONNECTION_ID );
-    }
-
-    bool apply( bool wait )
-    {
-        ProcessorInputPtr input = _dashProcessor->getProcessorInput_();
-
-        if( wait || input->dataWaitingOnInput( CONNECTION_ID ))
-            return input->applyAll( CONNECTION_ID );
-
-        return false;
-    }
-
-    void initializePipelineProcessors()
+    void shareGLContexts()
     {
         const Window* sharedWindow = static_cast< const Window* >(
                                          _window->getSharedContextWindow( ));
 
-        // share upload processors for windows which also share the GL context
         if( sharedWindow && sharedWindow != _window )
         {
             _glContext = sharedWindow->_impl->_glContext;
-            _dashProcessor = sharedWindow->_impl->_dashProcessor;
-            _textureUploader = sharedWindow->_impl->_textureUploader;
-            _dataUploader = sharedWindow->_impl->_dataUploader;
             return;
         }
-
-        // First one in group: setup
-        Node* node = static_cast< Node* >( _window->getNode( ));
-        DashTree& dashTree = node->getDashTree();
-        _dashProcessor->setDashContext( dashTree.createContext( ));
-        _dataUploader.reset( new DataUploadProcessor( dashTree, _glContext,
-                                                      node->getTextureDataCache( )));
-
-        Config* config = static_cast< Config* >( _window->getConfig( ));
-        Pipe* pipe = static_cast< Pipe* >( _window->getPipe( ));
-
-        _textureUploader.reset(
-            new EqTextureUploadProcessor( *config, dashTree, _glContext,
-                                          node->getTextureDataCache(),
-                                          pipe->getFrameData()->getVRParameters( )));
-    }
-
-    void initializePipelineConnections()
-    {
-        // Connects data uploader to texture uploader
-        DashConnectionPtr dataOutputConnectionPtr( new DashConnection( maxQueueSize ) );
-        _dataUploader->getProcessorOutput_< DashProcessorOutput >( )
-                ->addConnection( CONNECTION_ID, dataOutputConnectionPtr );
-
-        _textureUploader->getProcessorInput_< DashProcessorInput >( )
-                ->addConnection( CONNECTION_ID, dataOutputConnectionPtr );
-
-        // Connects texture uploader to pipe
-        DashConnectionPtr texOutputConnectionPtr( new DashConnection( maxQueueSize ) );
-        _textureUploader->getProcessorOutput_< DashProcessorOutput >()
-                ->addConnection( CONNECTION_ID, texOutputConnectionPtr );
-        _dashProcessor->getProcessorInput_< DashProcessorInput >()
-                ->addConnection( CONNECTION_ID, texOutputConnectionPtr );
-        // Connects pipe to data uploader
-        DashConnectionPtr pipeOutputConnectionPtr( new DashConnection( maxQueueSize ) );
-        _dataUploader->getProcessorInput_< DashProcessorInput >()
-                ->addConnection( CONNECTION_ID, pipeOutputConnectionPtr );
-        _dashProcessor->getProcessorOutput_< DashProcessorOutput >()
-                ->addConnection( CONNECTION_ID, pipeOutputConnectionPtr );
     }
 
     Window* const _window;
-
-    typedef std::shared_ptr< TextureUploadProcessor > TextureUploadProcessorPtr;
-    TextureUploadProcessorPtr _textureUploader;
-
-    typedef std::shared_ptr< DataUploadProcessor > DataUploadProcessorPtr;
-    DataUploadProcessorPtr _dataUploader;
-
-    DashProcessorPtr _dashProcessor;
     GLContextPtr _glContext;
+    std::unique_ptr< TexturePool > _texturePool;
+    std::unique_ptr< Cache > _textureCache;
+    std::unique_ptr< RenderPipeline > _renderPipeline;
 };
 
 Window::Window( eq::Pipe *parent )
@@ -250,12 +119,6 @@ bool Window::configInit( const eq::uint128_t& initId )
 
     _impl->configInit();
     return true;
-}
-
-bool Window::configExit()
-{
-    _impl->configExit();
-    return eq::Window::configExit();
 }
 
 bool Window::configInitGL( const eq::uint128_t& initId )
@@ -286,30 +149,22 @@ bool Window::configInitGL( const eq::uint128_t& initId )
 
 bool Window::configExitGL()
 {
-    _impl->configExitGL();
-    return eq::Window::configExitGL();
+    return _impl->configExitGL();
 }
 
-void Window::frameStart( const eq::uint128_t& frameID,
-                         const uint32_t frameNumber )
+Cache& Window::getTextureCache()
 {
-    _impl->frameStart();
-    eq::Window::frameStart( frameID, frameNumber );
+    return *_impl->_textureCache;
 }
 
-void Window::commit()
+const Cache& Window::getTextureCache() const
 {
-    _impl->commit();
+    return *_impl->_textureCache;
 }
 
-bool Window::apply( bool wait )
+const RenderPipeline& Window::getRenderPipeline() const
 {
-    return _impl->apply( wait );
-}
-
-const TextureCache& Window::getTextureCache() const
-{
-    return _impl->_textureUploader->getTextureCache();
+    return *_impl->_renderPipeline;
 }
 
 }

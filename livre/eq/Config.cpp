@@ -30,13 +30,15 @@
 #include <livre/eq/settings/CameraSettings.h>
 #include <livre/eq/settings/FrameSettings.h>
 #include <livre/eq/settings/RenderSettings.h>
-
+#include <livre/eq/settings/VolumeSettings.h>
 #include <livre/lib/configuration/ApplicationParameters.h>
 #include <livre/lib/configuration/VolumeRendererParameters.h>
 
 #include <livre/core/events/EventMapper.h>
-#include <livre/core/maths/maths.h>
+#include <livre/core/data/Histogram.h>
 #include <livre/core/util/FrameUtils.h>
+
+#include <lexis/render/imageJPEG.h>
 
 #ifdef LIVRE_USE_ZEROEQ
 #  include <livre/eq/zeroeq/communicator.h>
@@ -44,60 +46,142 @@
 
 #include <eq/eq.h>
 
+#include <deque>
+#include <functional>
+
 namespace livre
 {
+namespace
+{
+const uint32_t histogramLatency = 5;
+}
+
 class Config::Impl
 {
 public:
+
+    typedef std::vector< Histogram > Histograms;
+
+    struct ViewHistogram
+    {
+        ViewHistogram( const Histogram& histogram_,
+                       const float area_,
+                       const uint32_t id_ )
+            : histogram( histogram_ )
+            , area( area_ )
+            , id( id_ )
+
+        {}
+
+        ViewHistogram& operator+=( const ViewHistogram& hist )
+        {
+            histogram += hist.histogram;
+            area += hist.area;
+            return *this;
+        }
+
+        bool isComplete() const
+        {
+            const float eps = 0.0001f;
+            return std::abs( 1.0f - area ) <= eps;
+        }
+
+        Histogram histogram;
+        float area;
+        uint32_t id;
+
+    };
+
+    typedef std::deque< ViewHistogram > ViewHistogramQueue;
+
     explicit Impl( Config* config_ )
         : config( config_ )
         , defaultLatency( 0 )
         , currentCanvas( 0 )
         , eventMapper( EventHandlerFactoryPtr( new EqEventHandlerFactory ))
-        , volumeBBox( Boxf::makeUnitBox( ))
         , redraw( true )
         , dataFrameRange( INVALID_FRAME_RANGE )
+        , dataSourceRange( 0.0f, 255.0f ) // Default range for uint8 data sources
+        , frameStart( config->getTime( ))
     {
         animation.loadAnimation( "camera.txt" );
     }
 
-    void publishModelView()
+    void gatherHistogram( const Histogram& histogram, const float area, const uint32_t currentId )
     {
+        // If we get a very old frame skip it.
+        if( !histogramQueue.empty() && currentId < histogramQueue.back().id )
+            return;
+
+        // Extend the global histogram range if needed.
+        if( histogram.getMin() < dataSourceRange[ 0 ] )
+            dataSourceRange[ 0 ] = histogram.getMin();
+
+        if( histogram.getMax() > dataSourceRange[ 1 ] )
+            dataSourceRange[ 1 ] = histogram.getMax();
+
+        // Updating the range that clients must use to set their histogram range
+        config->getFrameData().getVolumeSettings().setDataSourceRange( dataSourceRange );
+
+        const ViewHistogram viewHistogram( histogram, area, currentId );
+        auto it = histogramQueue.begin();
+        while( it != histogramQueue.end( ))
+        {
+            auto& data = *it;
+            bool dataMerged = false;
+
+            if( currentId == data.id )
+            {
+                try
+                {
+                    data += viewHistogram;
+                    dataMerged = true;
+                }
+                catch( std::runtime_error& )
+                {
+                    // Only compatible histograms can be added.( i.e same data range and number of
+                    // bins.) Until data range converges to the full data range combined from all
+                    // rendering clients, the histograms are thrown away
+                    histogramQueue.erase( it, histogramQueue.end( ));
+                    return;
+                }
+            }
+            else if( currentId > data.id )
+            {
+                dataMerged = true;
+                it = histogramQueue.emplace( it, viewHistogram );
+            }
+
+            if( (*it).isComplete( )) // Send histogram & remove all old ones
+            {
 #ifdef LIVRE_USE_ZEROEQ
-        const CameraSettings& cameraSettings = framedata.getCameraSettings();
-        Matrix4f modelView = cameraSettings.getModelViewMatrix();
-
-        Matrix3f rotation;
-        Vector3f eyePos;
-        maths::getRotationAndEyePositionFromModelView( modelView,
-                                                       rotation,
-                                                       eyePos );
-
-        const Vector3f& circuitCenter = volumeBBox.getCenter();
-        const Vector3f& circuitSize = volumeBBox.getSize();
-        const float isotropicScale = circuitSize.find_max();
-
-        eyePos = ( eyePos * isotropicScale ) + circuitCenter;
-
-        modelView = maths::computeModelViewMatrix( rotation, eyePos );
-        communicator->publishModelView( modelView );
+                communicator->publishHistogram( (*it ).histogram );
 #endif
-    }
+                histogramQueue.erase( it, histogramQueue.end( ));
+                return;
+            }
 
-    Matrix4f convertFromHBPCamera( const Matrix4f& modelViewMatrix ) const
-    {
-        const Vector3f circuitCenter = volumeBBox.getCenter();
-        const Vector3f circuitSize = volumeBBox.getSize();
-        const float isotropicScale = circuitSize.find_max();
+            if( dataMerged )
+                break;
+            ++it;
+        }
 
-        Matrix3f rotation;
-        Vector3f eyePos;
-        maths::getRotationAndEyePositionFromModelView( modelViewMatrix,
-                                                       rotation,
-                                                       eyePos );
+        if( histogramQueue.empty() && !viewHistogram.isComplete( ))
+        {
+            histogramQueue.push_back( viewHistogram );
+            return;
+        }
 
-        eyePos = ( eyePos - circuitCenter ) / isotropicScale;
-        return maths::computeModelViewMatrix( rotation, eyePos );
+        if( viewHistogram.isComplete( ))
+        {
+#ifdef LIVRE_USE_ZEROEQ
+            communicator->publishHistogram( viewHistogram.histogram );
+#endif
+            return;
+        }
+
+        if( histogramQueue.size() > histogramLatency )
+            histogramQueue.pop_back();
     }
 
     Config* config;
@@ -105,12 +189,14 @@ public:
     eq::Canvas* currentCanvas;
     EventMapper eventMapper;
     FrameData framedata;
-    Boxf volumeBBox;
 #ifdef LIVRE_USE_ZEROEQ
     std::unique_ptr< zeroeq::Communicator > communicator;
 #endif
     bool redraw;
     Vector2ui dataFrameRange;
+    ViewHistogramQueue histogramQueue;
+    Vector2f dataSourceRange;
+    int64_t frameStart;
     CameraAnimation animation;
 };
 
@@ -133,6 +219,33 @@ FrameData& Config::getFrameData()
 const FrameData& Config::getFrameData() const
 {
     return _impl->framedata;
+}
+
+std::string Config::renderJPEG()
+{
+    getFrameData().getFrameSettings().setGrabFrame( true );
+    frame();
+
+    for( ;; )
+    {
+        eq::EventICommand event = getNextEvent();
+        if( !event.isValid( ))
+            continue;
+
+        if( event.getEventType() == GRAB_IMAGE )
+        {
+            const uint64_t dataSize = event.read< uint64_t >();
+            const uint8_t* dataPtr =
+                reinterpret_cast< const uint8_t* >( event.getRemainingBuffer( dataSize ) );
+
+            ::lexis::render::ImageJPEG imageJPEG;
+            imageJPEG.setData( dataPtr, dataSize );
+            return imageJPEG.toJSON();
+        }
+
+        handleEvent( event );
+    }
+    return "";
 }
 
 const ApplicationParameters& Config::getApplicationParameters() const
@@ -163,13 +276,16 @@ void Config::resetCamera()
         getApplicationParameters().cameraPosition );
     _impl->framedata.getCameraSettings().setCameraLookAt(
         getApplicationParameters().cameraLookAt );
-    _impl->publishModelView();
 }
 
 bool Config::init( const int argc LB_UNUSED, char** argv LB_UNUSED )
 {
 #ifdef LIVRE_USE_ZEROEQ
     _impl->communicator.reset( new zeroeq::Communicator( *this, argc, argv ));
+
+    _impl->framedata.getCameraSettings().registerNotifyChanged(
+                std::bind( &zeroeq::Communicator::publishCamera,
+                           _impl->communicator.get(), std::placeholders::_1 ));
 #endif
 
     resetCamera();
@@ -241,9 +357,13 @@ bool Config::frame()
     // reset data and advance current frame
     frameSettings.setGrabFrame( false );
 
-    if( !keepToLatest )
+    if( !keepToLatest && !_keepCurrentFrame( params.animationFPS ))
+    {
         frameSettings.setFrameNumber( frameUtils.getNext( current,
                                                           params.animation ));
+        // reset starting time for new frame
+         _impl->frameStart = getTime();
+    }
     _impl->redraw = false;
 
 #ifdef LIVRE_USE_ZEROEQ
@@ -273,10 +393,6 @@ bool Config::exit()
     _impl->framedata.deregisterObjects();
     if( !_deregisterFrameData() )
         ret = false;
-#ifdef LIVRE_USE_ZEROEQ
-    _impl->communicator->publishExit();
-#endif
-
     return ret;
 }
 
@@ -376,25 +492,17 @@ bool Config::switchToViewCanvas( const eq::uint128_t& viewID )
     return true;
 }
 
-void Config::handleEvents()
+void Config::handleNetworkEvents()
 {
-    eq::Config::handleEvents();
 #ifdef LIVRE_USE_ZEROEQ
     _impl->communicator->handleEvents();
-    _impl->communicator->publishHeartbeat();
 #endif
-}
-
-Matrix4f Config::convertFromHBPCamera( const Matrix4f& modelViewMatrix ) const
-{
-    return _impl->convertFromHBPCamera( modelViewMatrix );
 }
 
 bool Config::handleEvent( const eq::ConfigEvent* event )
 {
 #ifdef LIVRE_USE_ZEROEQ
-    const CameraSettings& cameraSettings = _impl->framedata.getCameraSettings();
-    const Matrix4f& oldModelViewMatrix = cameraSettings.getModelViewMatrix();
+    CameraSettings cameraSettings = _impl->framedata.getCameraSettings();
 #endif
 
     EqEventInfo eventInfo( this, event );
@@ -423,10 +531,6 @@ bool Config::handleEvent( const eq::ConfigEvent* event )
 
     if( hasEvent )
     {
-#ifdef LIVRE_USE_ZEROEQ
-        if( cameraSettings.getModelViewMatrix() != oldModelViewMatrix )
-            _impl->publishModelView();
-#endif
         _impl->redraw = true;
         return true;
     }
@@ -439,27 +543,21 @@ bool Config::handleEvent( eq::EventICommand command )
 {
     switch( command.getEventType( ))
     {
-    case VOLUME_BOUNDING_BOX:
-        _impl->volumeBBox = command.read< Boxf >();
-        return false;
-
-#ifdef LIVRE_USE_ZEROEQ
-    case GRAB_IMAGE:
-    {
-        const uint64_t dataSize = command.read< uint64_t >();
-        const uint8_t* dataPtr =
-            reinterpret_cast< const uint8_t* >( command.getRemainingBuffer( dataSize ) );
-
-        _impl->communicator->publishImageJPEG( dataPtr, dataSize );
-        return false;
-    }
-#endif
     case VOLUME_FRAME_RANGE:
     {
         _impl->dataFrameRange = command.read< Vector2ui >();
         return false;
     }
-
+#ifdef LIVRE_USE_ZEROEQ
+    case HISTOGRAM_DATA:
+    {
+        const Histogram& histogram = command.read< Histogram >();
+        const float area = command.read< float >();
+        const uint32_t id = command.read< uint32_t>();
+        _impl->gatherHistogram( histogram, area, id );
+        return false;
+    }
+#endif
     case REDRAW:
         _impl->redraw = true;
         return true;
@@ -469,14 +567,30 @@ bool Config::handleEvent( eq::EventICommand command )
     return _impl->redraw;
 }
 
+bool Config::_keepCurrentFrame( const uint32_t fps ) const
+{
+    if( fps == 0 )
+        return false;
+
+    const double desiredTime = 1.0 / fps;
+    const int64_t end = getTime();
+
+    // If the frame duration is shorter than the desired frame time then the
+    // current frame should be kept until the duration matches (or exceeds) the
+    // expected. Otherwise, the frame number should be normally increased.
+    // This means that no frames are artificially skipped due to the fps limit
+    const double frameDuration = ( end - _impl->frameStart ) / 1e3;
+    return frameDuration < desiredTime;
+}
+
 bool Config::_registerFrameData()
 {
-    return _impl->framedata.registerToConfig_( this );
+    return _impl->framedata.registerToConfig( this );
 }
 
 bool Config::_deregisterFrameData()
 {
-    return _impl->framedata.deregisterFromConfig_( this );
+    return _impl->framedata.deregisterFromConfig( this );
 }
 
 void Config::_initEvents()

@@ -26,6 +26,14 @@
 
 #include <lunchbox/refPtr.h>
 
+namespace lexis
+{
+namespace render
+{
+class ImageJPEG;
+}
+}
+
 namespace livre
 {
 

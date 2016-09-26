@@ -34,13 +34,16 @@ class RayCastRenderer : public Renderer
 public:
 
     /**
+     * Constructor
+     * @param dataSource the data source
+     * @param textureCache the source for cached textures
      * @param samplesPerRay Number of samples per ray.
      * @param samplesPerPixel Number of samples per pixel.
-     * @param volInfo Volume information.
      */
-    RayCastRenderer( uint32_t samplesPerRay,
-                     uint32_t samplesPerPixel,
-                     const VolumeInformation& volInfo );
+    RayCastRenderer( const DataSource& dataSource,
+                     const Cache& textureCache,
+                     uint32_t samplesPerRay,
+                     uint32_t samplesPerPixel );
     ~RayCastRenderer();
 
     /**
@@ -53,18 +56,27 @@ public:
     /** @internal @return number of bricks rendered in the last render() pass */
     size_t getNumBricksUsed() const;
 
-private:
-    void _onFrameStart( const Frustum& frustum,
-                        const PixelViewport& view,
-                        const RenderBricks& renderBricks ) final;
+    /**
+     * @copydoc Renderer::order
+     */
+    NodeIds order( const NodeIds& bricks, const Frustum& frustum ) const override;
 
-    void _renderBrick( const Frustum& frustum,
-                       const PixelViewport& view,
-                       const RenderBrick& renderBrick ) final;
+protected:
+
+    void _onFrameStart( const Frustum& frustum,
+                        const ClipPlanes& planes,
+                        const PixelViewport& view,
+                        const NodeIds& renderBricks ) override;
+
+    void _onFrameRender( const Frustum& frustum,
+                         const ClipPlanes& planes,
+                         const PixelViewport& view,
+                         const NodeIds& orderedBricks ) final;
 
     void _onFrameEnd( const Frustum& frustum,
+                      const ClipPlanes& planes,
                       const PixelViewport& view,
-                      const RenderBricks& renderBricks ) final;
+                      const NodeIds& renderBricks ) override;
 
     struct Impl;
     std::unique_ptr< Impl > _impl;

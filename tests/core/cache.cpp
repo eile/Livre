@@ -22,56 +22,55 @@
 #include <boost/test/unit_test.hpp>
 
 #include "cache/ValidCacheObject.h"
-#include "cache/Cache.h"
 
+#include <livre/core/cache/Cache.h>
 #include <livre/core/cache/CacheStatistics.h>
-
-namespace ut = boost::unit_test;
 
 BOOST_AUTO_TEST_CASE( testCache )
 {
     const size_t maxMemBytes = 2048u;
 
-    test::Cache cache( maxMemBytes );
-    BOOST_CHECK( cache.getCount() == 0 );
-
-    BOOST_CHECK( cache.getStatistics().getMaximumMemory() == maxMemBytes );
+    livre::CacheT< test::ValidCacheObject > cache( "Test Cache", maxMemBytes );
+    BOOST_CHECK_EQUAL( cache.getCount(), 0 );
+    BOOST_CHECK_EQUAL( cache.getStatistics().getMaximumMemory(), maxMemBytes );
 
     livre::CacheObjectPtr validCacheObject( new test::ValidCacheObject( 0 ) );
-    BOOST_CHECK( validCacheObject->getId() == 0 );
+    BOOST_CHECK_EQUAL( validCacheObject->getId(), 0 );
 
     livre::ConstCacheObjectPtr constCacheObject = cache.get( 1 );
 
     size_t cacheSize = 0;
     BOOST_CHECK( !constCacheObject );
 
-    livre::CacheObjectPtr cacheObject = cache.load( 1 );
+    livre::ConstCacheObjectPtr cacheObject = cache.load< test::ValidCacheObject >( 1 );
     cacheSize = cacheSize + cacheObject->getSize();
-    BOOST_CHECK( cache.getStatistics().getUsedMemory() == cacheSize );
+    BOOST_CHECK_EQUAL( cache.getStatistics().getUsedMemory(), cacheSize );
 
-    cacheObject = cache.load( 2 );
+    cacheObject = cache.load< test::ValidCacheObject >( 2 );
     BOOST_CHECK( cacheObject );
-    BOOST_CHECK( cache.getCount() == 2 );
-    BOOST_CHECK( std::static_pointer_cast< test::ValidCacheObject >( cacheObject )->getId() == 2 );
-    BOOST_CHECK( cacheObject.use_count() == 2 );
+    BOOST_CHECK_EQUAL( cache.getCount(), 2 );
+    BOOST_CHECK_EQUAL( cacheObject->getId(), 2 );
+    BOOST_CHECK_EQUAL( cacheObject.use_count(), 2 );
     cacheSize = cacheSize + cacheObject->getSize();
-    BOOST_CHECK( cache.getStatistics().getUsedMemory() == cacheSize );
+    BOOST_CHECK_EQUAL( cache.getStatistics().getUsedMemory(), cacheSize );
 
-    cacheObject = cache.load( 1 );
+    cacheObject = cache.load< test::ValidCacheObject >( 1 );
     BOOST_CHECK( cacheObject );
-    BOOST_CHECK( cache.getCount() == 2 );
-    BOOST_CHECK( std::static_pointer_cast< test::ValidCacheObject >( cacheObject )->getId() == 1 );
-    BOOST_CHECK( cacheObject.use_count() == 2 );
-    BOOST_CHECK( cache.getStatistics().getUsedMemory() == cacheSize );
+    BOOST_CHECK_EQUAL( cache.getCount(), 2 );
+    BOOST_CHECK_EQUAL( cacheObject->getId(), 1 );
+    BOOST_CHECK_EQUAL( cacheObject.use_count(), 2 );
+    BOOST_CHECK_EQUAL( cache.getStatistics().getUsedMemory(), cacheSize );
     cacheObject.reset();
 
-    livre::CacheObjectPtr cacheObjectTriggerClean = cache.load( 3 );
+    livre::ConstCacheObjectPtr cacheObjectTriggerClean = cache.load< test::ValidCacheObject >( 3 );
     BOOST_CHECK( cacheObjectTriggerClean );
 
-    BOOST_CHECK( cache.getCount() == 2 );
-    BOOST_CHECK( std::static_pointer_cast< test::ValidCacheObject >( cacheObjectTriggerClean )->getId() == 3 );
-    BOOST_CHECK( cacheObjectTriggerClean.use_count() == 2 );
-    BOOST_CHECK( cache.getStatistics().getUsedMemory() == cacheSize );
+    BOOST_CHECK_EQUAL( cache.getCount(), 2 );
+    BOOST_CHECK_EQUAL( cacheObjectTriggerClean->getId(), 3 );
+    BOOST_CHECK_EQUAL( cacheObjectTriggerClean.use_count(), 2 );
+    BOOST_CHECK_EQUAL( cache.getStatistics().getUsedMemory(), cacheSize );
+
+    cache.purge();
+    BOOST_CHECK_EQUAL( cache.getCount(), 0 );
+    BOOST_CHECK_EQUAL( cache.getStatistics().getUsedMemory(), 0 );
 }
-
-

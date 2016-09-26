@@ -33,30 +33,29 @@
 #include <livre/eq/settings/CameraSettings.h>
 #include <livre/eq/settings/FrameSettings.h>
 #include <livre/eq/settings/RenderSettings.h>
+#include <livre/eq/settings/VolumeSettings.h>
 #include <livre/eq/Window.h>
 
-#include <livre/lib/cache/TextureCache.h>
-#include <livre/lib/cache/TextureDataCache.h>
 #include <livre/lib/cache/TextureObject.h>
+#include <livre/lib/configuration/VolumeRendererParameters.h>
+#include <livre/lib/pipeline/RenderPipeline.h>
 
-#include <livre/lib/render/AvailableSetGenerator.h>
-#include <livre/lib/render/SelectVisibles.h>
-#include <livre/lib/visitor/DFSTraversal.h>
-
+#include <livre/core/cache/Cache.h>
 #include <livre/core/cache/CacheStatistics.h>
-#include <livre/core/dash/DashRenderStatus.h>
-#include <livre/core/dash/DashTree.h>
-#include <livre/core/dashpipeline/DashProcessorInput.h>
-#include <livre/core/dashpipeline/DashProcessorOutput.h>
 #include <livre/core/data/DataSource.h>
+#include <livre/core/data/Histogram.h>
 #include <livre/core/render/FrameInfo.h>
 #include <livre/core/render/Frustum.h>
-#include <livre/core/render/RenderBrick.h>
+#include <livre/core/visitor/DFSTraversal.h>
+
+#include <livre/core/pipeline/PipeFilter.h>
+#include <livre/core/pipeline/FutureMap.h>
+#include <livre/core/pipeline/Filter.h>
 
 #ifdef LIVRE_USE_ZEROEQ
 #  include <zeroeq/publisher.h>
 #endif
-#include <zerobuf/data/progress.h>
+#include <lexis/data/Progress.h>
 #include <eq/eq.h>
 #include <eq/gl.h>
 
@@ -92,13 +91,95 @@ struct ConvexSet
 
 typedef std::map< Vector3ui, ConvexSet > ConvexSetMap;
 
+struct RedrawFilter : public Filter
+{
+    explicit RedrawFilter( Channel* channel )
+        : _channel( channel )
+    {}
+
+    ~RedrawFilter() {}
+    void execute( const FutureMap& input,
+                  PromiseMap& ) const final
+    {
+        waitForAny( input.getFutures( ));
+
+        const bool isRenderingDone =  input.get< bool >( "RenderingDone" )[ 0 ];
+        if( !isRenderingDone )
+            _channel->getConfig()->sendEvent( REDRAW );
+    }
+
+    DataInfos getInputDataInfos() const final
+    {
+        return
+        {
+            { "CacheObjects", getType< ConstCacheObjects >() },
+            { "RenderingDone", getType< bool >() }
+        };
+    }
+
+    Channel* _channel;
+};
+
+
+struct SendHistogramFilter : public Filter
+{
+    explicit SendHistogramFilter( Channel* channel )
+        : _channel( channel )
+    {}
+
+    ~SendHistogramFilter() {}
+    void execute( const FutureMap& inputs, PromiseMap& ) const final
+    {
+        const auto viewport = inputs.get< Viewport >( "RelativeViewport" ).front();
+        const auto frameCounter =  inputs.get< uint32_t >( "Id" ).front();
+
+        Histogram histogramAccumulated;
+        for( const auto& histogram: inputs.get< Histogram >( "Histogram" ))
+                histogramAccumulated += histogram;
+
+        const_cast< eq::Config *>( _channel->getConfig())->sendEvent( HISTOGRAM_DATA )
+                << histogramAccumulated
+                << ( viewport[ 2 ] * viewport[ 3 ]) // area of the viewport ( w * h )
+                << frameCounter;
+    }
+
+    DataInfos getInputDataInfos() const final
+    {
+        return
+        {
+            { "Histogram", getType< Histogram >() },
+            { "RelativeViewport", getType< Viewport >() },
+            { "Id", getType< uint32_t >() }
+        };
+    }
+
+    Channel* _channel;
+};
+
+struct EqRaycastRenderer : public RayCastRenderer
+{
+    EqRaycastRenderer( Channel::Impl& channel,
+                       const DataSource& dataSource,
+                       const Cache& textureCache,
+                       uint32_t samplesPerRay,
+                       uint32_t samplesPerPixel )
+        : RayCastRenderer( dataSource, textureCache, samplesPerRay, samplesPerPixel )
+        , _channel( channel )
+    {}
+
+    void _onFrameStart( const Frustum& frustum,
+                        const ClipPlanes& planes,
+                        const PixelViewport& view,
+                        const NodeIds& renderBricks ) final;
+
+    Channel::Impl& _channel;
+};
+
 struct Channel::Impl
 {
 public:
     explicit Impl( Channel* channel )
           : _channel( channel )
-          , _frustum( Matrix4f(), Matrix4f( ))
-          , _frameInfo( _frustum, INVALID_FRAME )
           , _progress( "Loading bricks", 0 )
     {}
 
@@ -120,37 +201,31 @@ public:
     {
         const uint32_t nSamplesPerRay =
             getFrameData()->getVRParameters().getSamplesPerRay();
-
-        const uint32_t nSamplesPerPixel =
+        const uint32_t nSamplesPerPixel = 
             getFrameData()->getVRParameters().getSamplesPerPixel();
 
-        const livre::Node* node =
-                static_cast< livre::Node* >( _channel->getNode( ));
-
-        const livre::DashTree& dashTree = node->getDashTree();
-        const DataSource& dataSource = dashTree.getDataSource();
-        _renderer.reset( new RayCastRenderer( nSamplesPerRay,
-                                              nSamplesPerPixel,
-                                              dataSource.getVolumeInfo( )));
+        const Window* window = static_cast< const Window* >( _channel->getWindow( ));
+        const Node* node = static_cast< const Node* >( _channel->getNode( ));
+        _renderer.reset( new EqRaycastRenderer( *this,
+                                                node->getDataSource(),
+                                                window->getTextureCache(),
+                                                nSamplesPerRay,
+                                                nSamplesPerPixel ));
     }
 
-    const Frustum& setupFrustum()
+    Frustum setupFrustum() const
     {
         const eq::Matrix4f& modelView = computeModelView();
         const eq::Frustumf& eqFrustum = _channel->getFrustum();
         const eq::Matrix4f& projection = eqFrustum.computePerspectiveMatrix();
-
-        _frustum = Frustum( modelView, projection );
-        return _frustum;
+        return Frustum( modelView, projection );
     }
 
-    eq::Matrix4f computeModelView() const
+    Matrix4f computeModelView() const
     {
         const CameraSettings& cameraSettings =
             getFrameData()->getCameraSettings();
-        Matrix4f modelView = cameraSettings.getModelViewMatrix();
-        modelView = _channel->getHeadTransform() * modelView;
-        return modelView;
+        return _channel->getHeadTransform() * cameraSettings.getModelViewMatrix();
     }
 
     void clearViewport( const eq::PixelViewport &pvp )
@@ -295,12 +370,18 @@ public:
         return visitor.getVisibles();
     }
 
-    void updateRegions( const RenderBricks& bricks )
+    void updateRegions( const NodeIds& renderBricks, const Frustum& frustum )
     {
-        const Matrix4f& mvpMatrix = _frustum.getMVPMatrix();
-        for( const RenderBrick& brick : bricks )
+        const Matrix4f& mvpMatrix = frustum.getMVPMatrix();
+
+        livre::Node* node =
+                static_cast< livre::Node* >( _channel->getNode( ));
+        const DataSource& dataSource = node->getDataSource();
+
+        for( const NodeId& nodeId : renderBricks )
         {
-            const Boxf& worldBox = brick.getLODNode().getWorldBox();
+            const LODNode& lodNode = dataSource.getNode( nodeId );
+            const Boxf& worldBox =lodNode.getWorldBox();
             const Vector3f& min = worldBox.getMin();
             const Vector3f& max = worldBox.getMax();
             const Vector3f corners[8] =
@@ -342,10 +423,11 @@ public:
 #endif
     }
 
-    void freeTexture( const NodeId& nodeId )
+    void frameDraw()
     {
-        livre::Node* node = static_cast< livre::Node* >( _channel->getNode( ));
-        DashTree& dashTree = node->getDashTree();
+        const Pipe* pipe = static_cast< Pipe* >( _channel->getPipe( ));
+        const uint32_t frame =
+                pipe->getFrameData()->getFrameSettings().getFrameNumber();
 
         dash::NodePtr dashNode = dashTree.getDashNode( nodeId );
         if( !dashNode )
@@ -380,34 +462,21 @@ public:
 
         setupFrustum();
         _frameInfo = FrameInfo( _frustum, frame );
+        if( frame >= INVALID_TIMESTEP )
+            return;
 
-        const DashRenderNodes& visibles = requestData();
+        applyCamera();
+        const Frustum& frustum = setupFrustum();
+        _frameInfo = FrameInfo( frustum, frame, pipe->getCurrentFrame( ));
 
-        livre::Window* window = static_cast< livre::Window* >( _channel->getWindow( ));
-        const livre::Pipe* pipe = static_cast< const livre::Pipe* >( _channel->getPipe( ));
+        const eq::PixelViewport& pixVp = _channel->getPixelViewport();
+        _drawRange = _channel->getRange();
 
-        const bool isSynchronous =
-            pipe->getFrameData()->getVRParameters().getSynchronousMode();
+        const eq::Viewport& vp = _channel->getViewport();
+        _drawRange = _channel->getRange();
 
-        // #75: only wait for data in synchronous mode
-        const bool dashTreeUpdated = window->apply( isSynchronous );
-
-        if( dashTreeUpdated )
-        {
-            const Frustum& receivedFrustum = renderStatus.getFrustum();
-
-            // If there are multiple channels, this may cause the ping-pong
-            // because every channel will try to update the same DashTree in
-            // node with their own frustum.
-            if( !isSynchronous && receivedFrustum != _frustum )
-                _channel->getConfig()->sendEvent( REDRAW );
-        }
-
-        const AvailableSetGenerator generateSet( window->getTextureCache( ));
-
-        for( const auto& visible : visibles )
-            _frameInfo.allNodes.push_back(visible.getLODNode().getNodeId());
-        generateSet.generateRenderingSet( _frameInfo );
+        const livre::Window* window = static_cast< const livre::Window* >( _channel->getWindow( ));
+        const RenderPipeline& renderPipeline = window->getRenderPipeline();
 
         _renderer->update( *pipe->getFrameData( ));
         generateRenderSets( _frameInfo.renderNodes, _renderSets );
@@ -425,12 +494,23 @@ public:
         _renderSets.pop_back();
         _image.setContext( _channel->getContext( ));
         freeTextures();
+        renderPipeline.render( { pipe->getFrameData()->getVRParameters(),
+                                 _frameInfo,
+                                 {{ _drawRange.start, _drawRange.end }},
+                                 pipe->getFrameData()->getVolumeSettings().getDataSourceRange(),
+                                 PixelViewport( pixVp.x, pixVp.y, pixVp.w, pixVp.h ),
+                                 Viewport( vp.x, vp.y, vp.w, vp.h ),
+                                 pipe->getFrameData()->getRenderSettings().getClipPlanes(),
+                               },
+                               PipeFilterT< RedrawFilter >( "RedrawFilter", _channel ),
+                               PipeFilterT< SendHistogramFilter >( "SendHistogramFilter", _channel ),
+                               *_renderer,
+                               _availability );
     }
 
     void applyCamera()
     {
-        const CameraSettings& cameraSettings =
-            getFrameData()->getCameraSettings();
+        const CameraSettings& cameraSettings = getFrameData()->getCameraSettings();
         glMultMatrixf( cameraSettings.getModelViewMatrix().array );
     }
 
@@ -470,11 +550,11 @@ public:
         }
 
 #ifdef LIVRE_USE_ZEROEQ
-        const size_t all = _frameInfo.allNodes.size();
+        const size_t all = _availability.nAvailable + _availability.nNotAvailable;
         if( all > 0 )
         {
             _progress.restart( all );
-            _progress += all - _frameInfo.notAvailableRenderNodes.size();
+            _progress += _availability.nAvailable;
             _publisher.publish( _progress );
         }
 #endif
@@ -495,31 +575,28 @@ public:
         glMatrixMode( GL_MODELVIEW );
 
         livre::Node* node = static_cast< livre::Node* >( _channel->getNode( ));
-        const size_t all = _frameInfo.allNodes.size();
-        const size_t missing = _frameInfo.notAvailableRenderNodes.size();
+        const size_t all = _availability.nAvailable + _availability.nNotAvailable;
+        const size_t missing = _availability.nNotAvailable;
         const float done = all > 0 ? float( all - missing ) / float( all ) : 0;
-        Window* window = static_cast< Window* >( _channel->getWindow( ));
+        const Window* window = static_cast< Window* >( _channel->getWindow( ));
 
         std::ostringstream os;
-        os << node->getTextureDataCache().getStatistics() << "  "
+        os << node->getDataCache().getStatistics() << "  "
            << int( 100.f * done + .5f ) << "% loaded" << std::endl
            << window->getTextureCache().getStatistics();
 
-        const DataSource& dataSource = static_cast< livre::Node* >(
-            _channel->getNode( ))->getDashTree().getDataSource();
+        const DataSource& dataSource = node->getDataSource();
         const VolumeInformation& info = dataSource.getVolumeInfo();
-        Vector3f voxelSize = info.boundingBox.getSize() / info.voxels;
-        std::string unit = "m";
-        if( voxelSize.x() < 0.000001f )
-        {
+        const Vector3f resolution = info.resolution;
+
+        const float ratio = 1.0f / info.meterToDataUnitRatio;
+        std::string unit = "unit unknown";
+        if( ratio == 1e-6 )
             unit = "um";
-            voxelSize *= 1000000;
-        }
-        if( voxelSize.x() < 0.001f )
-        {
+        else if( ratio == 1e-3 )
             unit = "mm";
-            voxelSize *= 1000;
-        }
+        else if( ratio == 1.0f )
+            unit = "m";
 
         const size_t nBricks = _renderer->getNumBricksUsed();
         const float mbBricks =
@@ -528,12 +605,13 @@ public:
         os << nBricks << " bricks / " << mbBricks << " MB rendered" << std::endl
            << "Total resolution " << info.voxels << " depth "
            << info.rootNode.getDepth() << std::endl
-           << "Block resolution " << info.maximumBlockSize << std::endl
-           << unit << "/voxel " << voxelSize;
+           << "Block resolution " << info.maximumBlockSize << std::endl;
+        if( resolution.find_min() > 0.0f )
+            os << resolution << "voxel/" << unit;
 
         float y = 240.f;
         std::string text = os.str();
-        const eq::util::BitmapFont* font =_channel->getWindow()->getSmallFont();
+        const eq::util::BitmapFont* font = _channel->getWindow()->getSmallFont();
         for( size_t pos = text.find( '\n' ); pos != std::string::npos;
              pos = text.find( '\n' ))
         {
@@ -548,16 +626,9 @@ public:
         font->draw( text );
     }
 
-    void frameFinish()
-    {
-        livre::Node* node = static_cast< livre::Node* >( _channel->getNode( ));
-        DashRenderStatus& renderStatus = node->getDashTree().getRenderStatus();
-        renderStatus.setFrustum( _frustum );
-    }
-
     void frameReadback( const eq::Frames& frames ) const
     {
-        for( eq::Frame* frame : frames ) // Drop depth buffer from output frames
+        for( eq::Frame* frame: frames ) // Drop depth buffer from output frames
             frame->disableBuffer( eq::Frame::BUFFER_DEPTH );
     }
 
@@ -711,18 +782,27 @@ public:
         }
     }
 
-    livre::Channel* const _channel;
+    livre::Channel* _channel;
+    eq::Range _drawRange;
     eq::Image _image;
-    Frustum _frustum;
     FrameGrabber _frameGrabber;
     FrameInfo _frameInfo;
-    RenderSets _renderSets;
+    NodeAvailability _availability;
     std::unique_ptr< RayCastRenderer > _renderer;
-    ::zerobuf::data::Progress _progress;
+    ::lexis::data::Progress _progress;
 #ifdef LIVRE_USE_ZEROEQ
     zeroeq::Publisher _publisher;
 #endif
 };
+
+void EqRaycastRenderer::_onFrameStart( const Frustum& frustum,
+                                       const ClipPlanes& planes,
+                                       const PixelViewport& view,
+                                       const NodeIds& renderBricks )
+{
+    _channel.updateRegions( renderBricks, frustum );
+    RayCastRenderer::_onFrameStart( frustum, planes, view, renderBricks );
+}
 
 Channel::Channel( eq::Window* parent )
         : eq::Channel( parent )
@@ -736,7 +816,7 @@ Channel::~Channel()
 
 bool Channel::configInit( const eq::uint128_t& initId )
 {
-    if( !eq::Channel::configInit( initId ) )
+    if( !eq::Channel::configInit( initId ))
         return false;
 
     _impl->configInit();
@@ -750,10 +830,11 @@ bool Channel::configExit()
 }
 
 void Channel::frameStart( const eq::uint128_t& frameID,
-                          const uint32_t frameNumber )
+                          const uint32_t frameCounter )
 {
     _impl->_image.reset();
     eq::Channel::frameStart( frameID, frameNumber );
+    _impl->_drawRange = eq::Range::ALL;
 }
 
 bool Channel::frameRender( const eq::RenderContext& context,
@@ -776,7 +857,8 @@ void Channel::frameDraw( const lunchbox::uint128_t& frameId )
     _impl->frameDraw();
 }
 
-void Channel::frameFinish( const eq::uint128_t& frameID, const uint32_t frameNumber )
+void Channel::frameFinish( const eq::uint128_t& frameID,
+                           const uint32_t frameNumber )
 {
     _impl->frameFinish();
     eq::Channel::frameFinish( frameID, frameNumber );
@@ -815,11 +897,9 @@ void Channel::frameReadback( const eq::uint128_t& frameId,
 
 std::string Channel::getDumpImageFileName() const
 {
-    const livre::Node* node = static_cast< const livre::Node* >( getNode( ));
-    const DashTree& dashTree = node->getDashTree();
     std::stringstream filename;
     filename << std::setw( 5 ) << std::setfill('0')
-             << dashTree.getRenderStatus().getFrameID() << ".png";
+             << _impl->_frameInfo.timeStep << ".png";
     return filename.str();
 }
 

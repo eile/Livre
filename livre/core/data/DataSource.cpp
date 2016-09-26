@@ -109,6 +109,9 @@ MemoryUnitPtr DataSource::getData( const NodeId& nodeId )
         return MemoryUnitPtr();
 
     const LODNode& lodNode = getNode( nodeId );
+    if( !lodNode.isValid( ))
+        return MemoryUnitPtr();
+
     return _impl->plugin->getData( lodNode );
 }
 
@@ -118,7 +121,16 @@ ConstMemoryUnitPtr DataSource::getData( const NodeId& nodeId ) const
         return ConstMemoryUnitPtr();
 
     const LODNode& lodNode = getNode( nodeId );
+    if( !lodNode.isValid( ))
+        return ConstMemoryUnitPtr();
+
     return _impl->plugin->getData( lodNode );
+}
+
+VolumeInformation DataSource::getVolumeInfo( const lunchbox::URI& uri )
+{
+    const DataSource source( uri );
+    return source.getVolumeInfo();
 }
 
 DataSource::~DataSource()

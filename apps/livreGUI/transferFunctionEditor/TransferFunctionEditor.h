@@ -1,6 +1,7 @@
-/* Copyright (c) 2015, EPFL/Blue Brain Project
- *                     Marwan Abdellah <marwan.abdellah@epfl.ch>
- *                     Grigori Chevtchenko <grigori.chevtchenko@epfl.ch>
+/* Copyright (c) 2015-2016, EPFL/Blue Brain Project
+ *                          Marwan Abdellah <marwan.abdellah@epfl.ch>
+ *                          Grigori Chevtchenko <grigori.chevtchenko@epfl.ch>
+ *                          Stefan.Eilemann@epfl.ch
  *
  * This file is part of Livre <https://github.com/BlueBrain/Livre>
  *
@@ -22,20 +23,20 @@
 #define _TransferFunctionEditor_h_
 
 #include <livreGUI/types.h>
+#include <livre/core/render/TransferFunction1D.h>
+#include <livre/core/data/Histogram.h>
 #include <lunchbox/monitor.h> // member
 #include <QWidget>
 
-namespace Ui
-{
-class TransferFunctionEditor;
-}
+#include <array>
+
+namespace Ui { class TransferFunctionEditor; }
+
 namespace livre
 {
 class ColorMapWidget;
 
-/**
- * This contains all the widget for the transfert function editor.
- */
+/** This contains all the widget for the transfer function editor. */
 class TransferFunctionEditor: public QWidget
 {
     Q_OBJECT
@@ -44,9 +45,8 @@ public:
 
     /**
      * Constructor of TransferFunctionEditor.
-     * @param conroller The controller used to receive/publish transfer fuction
-     * data.
-     * @param tfParentWidget Parent widget.
+     * @param controller The ZeroEQ publish/receive controller
+     * @param tfParentWidget The parent GUI widget
      */
     TransferFunctionEditor( livre::Controller& controller,
                             QWidget* tfParentWidget = 0 );
@@ -54,7 +54,8 @@ public:
 
 signals:
     void gradientStopsChanged( const QGradientStops& stops );
-    void transferFunctionChanged( UInt8s tf );
+    void transferFunctionChanged();
+    void histogramChanged();
 
 private Q_SLOTS:
 
@@ -62,21 +63,27 @@ private Q_SLOTS:
     void _load();
     void _save();
     void _setDefault();
-    void _pointsUpdated();
-    void _onTransferFunctionChanged( UInt8s tf );
+    void _onColorsChanged();
+    void _onHistIndexChanged( size_t index, double value);
+    void _onHistogramChanged();
+    void _onTransferFunctionChanged();
+    void _onScaleChanged( int state );
 
 private:
 
     void _publishTransferFunction();
-    void _onTransferFunction( const zeroeq::Event& event );
+    void _onTransferFunction();
+    void _setGradientStops();
+    void _setHistogram();
+    void _widgetsUpdated();
 
+    livre::TransferFunction1D _lut;
+    livre::Histogram _histogram;
     livre::Controller& _controller;
     Ui::TransferFunctionEditor* _ui;
-    bool _tfReceived;
-    ColorMapWidget* _redWidget;
-    ColorMapWidget* _greenWidget;
-    ColorMapWidget* _blueWidget;
-    ColorMapWidget* _alphaWidget;
+
+    typedef std::array< ColorMapWidget*, 4 > ColorWidgets;
+    ColorWidgets _colorWidgets;
 };
 
 }

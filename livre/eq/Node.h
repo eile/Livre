@@ -23,7 +23,6 @@
 #define _Node_h_
 
 #include <livre/eq/api.h>
-#include <livre/core/dash/DashContextTrait.h>
 #include <livre/lib/types.h>
 #include <eq/node.h>
 
@@ -33,34 +32,30 @@ namespace livre
  * The Node class is a standard EQ abstraction for a process. It manages the data loaders
  * and keeps the data cache.
  */
-class Node : public eq::Node, public DashContextTrait
+class Node : public eq::Node
 {
 public:
     /**
-     * @param parent Parent config that owns the Node.
+     * @param parent config that owns the Node.
      */
     LIVREEQ_API Node( eq::Config* parent );
     LIVREEQ_API ~Node();
 
-    /**
-     * @return The texture data cache.
-     */
-    TextureDataCache& getTextureDataCache();
+    /** @return The data source. */
+    DataSource& getDataSource();
 
-    /**
-     * @return The dash tree.
-     */
-    DashTree& getDashTree();
+    /** @return The data source. */
+    const DataSource& getDataSource() const;
 
-    /**
-     * @return The dash tree.
-     */
-    const DashTree& getDashTree() const;
+    /** @return The data cache. */
+    Cache& getDataCache();
+
+    /** @return The histogram cache. */
+    Cache& getHistogramCache();
 
 private:
     bool configInit( const eq::uint128_t& initId ) final;
-    void frameStart(  const eq::uint128_t& frameId,
-                      const uint32_t frameNumber ) final;
+    void frameStart(  const eq::uint128_t& frameId, const uint32_t frameNumber ) final;
     bool configExit() final;
 
     struct Impl;

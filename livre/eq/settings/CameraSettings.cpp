@@ -1,5 +1,6 @@
 
-/* Copyright (c) 2006-2016, Stefan Eilemann <eile@equalizergraphics.com>
+/* Copyright (c) 2006-2016, Grigori Chevtchenko <grigori.chevtchenko@epfl.ch>
+ *                          Stefan Eilemann <eile@equalizergraphics.com>
  *                          Maxim Makhinya  <maxmah@gmail.com>
  *                          Ahmet Bilgili   <ahmet.bilgili@epfl.ch>
  *                          Daniel.Nachbaur@epfl.ch
@@ -22,77 +23,112 @@
 
 #include <livre/eq/settings/CameraSettings.h>
 
-#include <livre/core/maths/maths.h>
 #include <co/co.h>
+
+#include <algorithm>
 
 namespace livre
 {
 
 CameraSettings::CameraSettings()
-    : cameraPosition_( 0.f, 0.f, 1.5f )
-{
-}
+    : _notifyChangedFunc([&]( const Matrix4f& ){})
+{}
 
 void CameraSettings::serialize( co::DataOStream& os, const uint64_t dirtyBits )
 {
     co::Serializable::serialize( os, dirtyBits );
-    os << modelRotation_ << cameraPosition_;
+    os << _modelview;
 }
-
 void CameraSettings::deserialize( co::DataIStream& is, const uint64_t dirtyBits )
 {
     co::Serializable::deserialize( is, dirtyBits );
-    is >> modelRotation_ >> cameraPosition_;
+    is >> _modelview;
 }
 
-void CameraSettings::spinModel( const float x, const float y, const float z )
+void CameraSettings::spinModel( const float x, const float y )
 {
-    if( x == 0.f && y == 0.f && z == 0.f )
+    if( x == 0.f && y == 0.f )
         return;
 
-    modelRotation_.pre_rotate_x( x );
-    modelRotation_.pre_rotate_y( y );
-    modelRotation_.pre_rotate_z( z );
+    float translation[3];
+    translation[0] = _modelview(0,3);
+    translation[1] = _modelview(1,3);
+    translation[2] = _modelview(2,3);
+
+    _modelview(0,3) = 0.0;
+    _modelview(1,3) = 0.0;
+    _modelview(2,3) = 0.0;
+
+    _modelview.pre_rotate_x( x );
+    _modelview.pre_rotate_y( y );
+
+    _modelview(0,3) = translation[0];
+    _modelview(1,3) = translation[1];
+    _modelview(2,3) = translation[2];
+
     setDirty( DIRTY_ALL );
+    _notifyChangedFunc( _modelview );
 }
 
 void CameraSettings::moveCamera( const float x, const float y, const float z )
 {
-    cameraPosition_ += Vector3f( x, y, z );
+    _modelview(0,3) += x;
+    _modelview(1,3) += y;
+    _modelview(2,3) += z;
+
     setDirty( DIRTY_ALL );
+    _notifyChangedFunc( _modelview );
 }
 
-void CameraSettings::setCameraPosition( const Vector3f& position )
+void CameraSettings::setCameraPosition( const Vector3f& pos )
 {
-    cameraPosition_ = position;
+    _modelview(0,3) = pos.x();
+    _modelview(1,3) = pos.y();
+    _modelview(2,3) = pos.z();
+
     setDirty( DIRTY_ALL );
+    _notifyChangedFunc( _modelview );
+}
+
+void CameraSettings::registerNotifyChanged( const std::function< void( const Matrix4f& )>&
+                                            notifyChangedFunc )
+{
+     _notifyChangedFunc = notifyChangedFunc;
 }
 
 void CameraSettings::setCameraLookAt( const Vector3f& lookAt )
 {
-    setModelViewMatrix( maths::computeModelViewMatrix( cameraPosition_, lookAt ));
-}
+    const Vector3f eye( _modelview(0,3),
+                        _modelview(1,3),
+                        _modelview(2,3));
+    const Vector3f zAxis = vmml::normalize( eye - lookAt );
 
-void CameraSettings::setModelViewMatrix( const Matrix4f& modelViewMatrix )
-{
-    Matrix3f rotationMatrix;
-    maths::getRotationAndEyePositionFromModelView( modelViewMatrix,
-                                                   rotationMatrix,
-                                                   cameraPosition_ );
-    const Matrix3f& inverseRotation = vmml::transpose( rotationMatrix );
-    modelRotation_ = inverseRotation;
-    modelRotation_( 3, 3 ) = 1;
-    cameraPosition_ = inverseRotation * -cameraPosition_;
+    // Avoid Gimbal lock effect when looking upwards/downwards
+    Vector3f up( Vector3f::UP );
+    const float angle = zAxis.dot( up );
+    if( 1.f - std::abs( angle ) < 0.0001f )
+    {
+        Vector3f right( Vector3f::RIGHT );
+        if( angle > 0 ) // Looking downwards
+            right = Vector3f::LEFT;
+        up = up.rotate( 0.01f, right );
+        up.normalize();
+    }
+
+    _modelview = Matrix4f( eye, lookAt, up );
 
     setDirty( DIRTY_ALL );
+    _notifyChangedFunc( _modelview );
+}
+
+void CameraSettings::setModelViewMatrix( const Matrix4f& modelview )
+{
+    _modelview = modelview;
+     setDirty( DIRTY_ALL );
 }
 
 Matrix4f CameraSettings::getModelViewMatrix() const
 {
-    Matrix4f modelView;
-    modelView = modelRotation_;
-    modelView.setTranslation( cameraPosition_ );
-    return modelView;
+    return _modelview;
 }
-
 }

@@ -19,7 +19,6 @@
 
 #include <livre/uvf/UVFDataSource.h>
 
-#include <livre/core/dash/DashRenderNode.h>
 #include <livre/core/data/LODNode.h>
 #include <livre/core/data/MemoryUnit.h>
 
@@ -91,9 +90,9 @@ public:
             if( _uvfDataSetPtr->GetIsFloat() )
             {
                 if( bitWidth == 32 )
-                    _volumeInfo.dataType = DT_FLOAT32;
+                    _volumeInfo.dataType = DT_FLOAT;
                 else if( bitWidth == 64 )
-                    _volumeInfo.dataType = DT_FLOAT64;
+                    LBTHROW( std::runtime_error( "Livre doesn't suppport double data type." ));
             }
             else if( !_uvfDataSetPtr->GetIsSigned() )
             {
@@ -204,18 +203,15 @@ public:
                                           tuvokBricksInThisLod.z );
 
         uint32_t brickIndex = getBrickIndex( minPos[ 0 ],
-                                              minPos[ 1 ],
-                                              minPos[ 2 ],
-                                              bricksInThisLod );
+                                             minPos[ 1 ],
+                                             minPos[ 2 ],
+                                             bricksInThisLod );
 
         MemoryUnitPtr memUnitPtr;
         switch( _volumeInfo.dataType )
         {
-            case  DT_FLOAT32 :
+            case  DT_FLOAT :
               memUnitPtr = tuvokBrickToMemoryUnit< float >( node, brickIndex );
-              break;
-            case  DT_FLOAT64 :
-              memUnitPtr = tuvokBrickToMemoryUnit< double >( node, brickIndex );
               break;
             case  DT_UINT8 :
               memUnitPtr = tuvokBrickToMemoryUnit< uint8_t >( node,brickIndex );
@@ -246,12 +242,12 @@ public:
     MemoryUnitPtr tuvokBrickToMemoryUnit( const LODNode& node,
                                            const uint32_t brickIndex ) const
     {
-        const uint32_t frame = node.getNodeId().getFrame();
+        const uint32_t frame = node.getNodeId().getTimeStep();
         const tuvok::BrickKey brickKey =
                 tuvok::BrickKey( frame, treeLevelToTuvokLevel(
                                             node.getRefLevel( )), brickIndex );
 
-        const UINT64VECTOR4 coords = _uvfDataSetPtr->KeyToTOCVector( brickKey );
+        const UINT64VECTOR4& coords = _uvfDataSetPtr->KeyToTOCVector( brickKey );
         const TOCEntry& blockInfo = _uvfTOCBlock->GetBrickInfo( coords );
 
         MemoryUnitPtr memUnitPtr;
@@ -264,7 +260,7 @@ public:
                      (const unsigned char*)_tuvokLargeMMapFilePtr->rd(
                                                         offset, length ).get( );
 
-             memUnitPtr.reset( new ConstMemoryUnit( dataPtr, blockInfo.m_iLength  ) );
+             memUnitPtr.reset( new ConstMemoryUnit( dataPtr, blockInfo.m_iLength ));
         }
         else
         {
@@ -290,9 +286,7 @@ public:
                 zDecompress( src, dst, uncompressedSize );
             }
 
-            AllocMemoryUnit* allocUnit = new AllocMemoryUnit( );
-            allocUnit->allocAndSetData< T >( tuvokData );
-            memUnitPtr.reset( allocUnit );
+            memUnitPtr.reset( new AllocMemoryUnit( tuvokData ));
         }
 
         return memUnitPtr;
@@ -300,7 +294,7 @@ public:
 
     LODNode internalNodeToLODNode( const NodeId& internalNode ) const
     {
-        const uint32_t frame = internalNode.getFrame();
+        const uint32_t frame = internalNode.getTimeStep();
         const uint32_t lod = treeLevelToTuvokLevel( internalNode.getLevel() );
         const UINTVECTOR3& tuvokBricksInLod =
                 _uvfDataSetPtr->GetBrickLayout( lod, frame );

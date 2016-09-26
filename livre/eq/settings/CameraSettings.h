@@ -23,8 +23,8 @@
 #define _CameraSettings_h_
 
 #include <livre/core/mathTypes.h>
-#include <co/serializable.h>
 #include <eq/fabric/vmmlib.h>
+#include <co/serializable.h> // base class
 
 namespace livre
 {
@@ -45,7 +45,7 @@ public:
      * @param y y component.
      * @param z z component.
      */
-    void spinModel( float x, float y, float z );
+    void spinModel( float x, float y );
 
     /**
      * Moves the camera to (x,y,z) amount.
@@ -62,38 +62,33 @@ public:
     void setCameraPosition( const Vector3f& position );
 
     /**
+     * Register a callback for camera changes.
+     * @param notifyChangedFunc the callback function.
+     */
+    void registerNotifyChanged( const std::function< void( const Matrix4f& )>& notifyChangedFunc );
+
+    /**
      * Sets the camera orientation, defined by a lookAt vector.
      * @param lookAt the reference point position to orient the camera to.
      */
     void setCameraLookAt( const Vector3f& lookAt );
 
     /**
-     * Sets the modelviewmatrix.
-     * @param modelviewMatrix
+     * Sets the camera's modelview matrix.
+     * @param modelview the new modelview matrix.
      */
-    void setModelViewMatrix( const Matrix4f& modelViewMatrix );
+    void setModelViewMatrix( const Matrix4f& modelview );
 
-    /**
-     * @return Returns model rotation matrix.
-     */
-    const Matrix4f& getModelRotation() const { return modelRotation_; }
-
-    /**
-     * @return Returns the camera position in x,y and z.
-     */
-    const Vector3f& getCameraPosition() const { return cameraPosition_; }
-
-    /**
-     * @return the modelview matrix is computed using the model and camera matrix.
-     */
+    /** @return the camera transformation */
     Matrix4f getModelViewMatrix() const;
 
 private:
-    void serialize( co::DataOStream& os, const uint64_t dirtyBits ) final;
-    void deserialize( co::DataIStream& is, const uint64_t dirtyBits ) final;
 
-    Matrix4f modelRotation_;
-    Vector3f cameraPosition_;
+    virtual void serialize( co::DataOStream& os, const uint64_t dirtyBits );
+    virtual void deserialize( co::DataIStream& is, const uint64_t dirtyBits );
+
+    Matrix4f _modelview;
+    std::function< void( const Matrix4f& )> _notifyChangedFunc;
 };
 
 }

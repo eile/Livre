@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, EPFL/Blue Brain Project
+/* Copyright (c) 2011-2016, EPFL/Blue Brain Project
  *                          Grigori Chevtchenko <grigori.chevtchenko@epfl.ch>
  *
  * This file is part of Livre <https://github.com/BlueBrain/Livre>
@@ -33,17 +33,17 @@ namespace livre
 FrameGrabber::FrameGrabber()
     : ResultImageListener()
 #ifdef LIVRE_USE_LIBJPEGTURBO
-    , handleCompress_( tjInitCompress() )
+    , _compressor( tjInitCompress() )
 #else
-    , handleCompress_( 0 )
+    , _compressor( nullptr )
 #endif
 {}
 
 FrameGrabber::~FrameGrabber()
 {
 #ifdef LIVRE_USE_LIBJPEGTURBO
-    if( handleCompress_ )
-        tjDestroy(handleCompress_);
+    if( _compressor )
+        tjDestroy(_compressor);
 #endif
 }
 
@@ -65,7 +65,7 @@ uint8_t* FrameGrabber::_encodeJpeg( const uint32_t width LB_UNUSED,
     const int32_t tjFlags = TJXOP_ROT180;
 
     const int32_t success =
-        tjCompress2( handleCompress_, tjSrcBuffer, width, tjPitch, height,
+        tjCompress2( _compressor, tjSrcBuffer, width, tjPitch, height,
                      tjPixelFormat, &tjJpegBuf, &dataSize, tjJpegSubsamp,
                      tjJpegQual, tjFlags);
 
@@ -76,7 +76,9 @@ uint8_t* FrameGrabber::_encodeJpeg( const uint32_t width LB_UNUSED,
     }
     return static_cast<uint8_t *>(tjJpegBuf);
 #else
-    return 0;
+    if( !_compressor ) // just to silence unused private field warning
+        return nullptr;
+    return nullptr;
 #endif
 }
 
@@ -86,12 +88,9 @@ void FrameGrabber::notifyNewImage( eq::Channel& channel,
     const uint64_t size = image.getPixelDataSize( eq::Frame::BUFFER_COLOR );
     const uint8_t* data = image.getPixelPointer( eq::Frame::BUFFER_COLOR );
     const eq::PixelViewport& pvp = image.getPixelViewport();
-    const eq::Viewport& vp = channel.getViewport();
 
-    const uint32_t width = pvp.w / vp.w;
-    const uint32_t height = pvp.h / vp.h;
     unsigned long jpegSize = size;
-    uint8_t* jpegData = _encodeJpeg( width, height, data, jpegSize );
+    uint8_t* jpegData = _encodeJpeg( pvp.w, pvp.h, data, jpegSize );
 
     if( !jpegData )
     {

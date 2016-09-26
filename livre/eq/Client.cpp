@@ -32,9 +32,6 @@
 #include <livre/eq/FrameData.h>
 #include <livre/eq/settings/VolumeSettings.h>
 #include <livre/eq/settings/CameraSettings.h>
-#ifdef LIVRE_USE_RESTBRIDGE
-#  include <restbridge/RestBridge.h>
-#endif
 
 namespace livre
 {
@@ -60,7 +57,7 @@ struct Client::Impl
         }
 
         if( _applicationParameters.dataFileName.empty())
-            _applicationParameters.dataFileName = "mem:///#4096,4096,4096,32";
+            _applicationParameters.dataFileName = "mem:///#4096,4096,4096,40";
 
         return true;
     }
@@ -76,9 +73,6 @@ struct Client::Impl
 
         std::stringstream os;
         os << conf;
-    #ifdef LIVRE_USE_RESTBRIDGE
-        os << std::endl << restbridge::RestBridge::getHelp();
-    #endif
         return os.str();
     }
 
@@ -219,9 +213,11 @@ int Client::run( const int argc, char** argv )
                 if( event.isValid( ))
                     config->handleEvent( event );
                 config->handleEvents(); // non-blocking
+                config->handleNetworkEvents(); //blocking
             }
         }
         config->handleEvents(); // process all pending events
+        config->handleNetworkEvents(); //blocking
     }
 
     const uint32_t frame = config->finishAllFrames();

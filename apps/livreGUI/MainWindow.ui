@@ -22,7 +22,7 @@ background-color: darkGray; width: 1px; height: 1px;
      <x>0</x>
      <y>0</y>
      <width>800</width>
-     <height>25</height>
+     <height>20</height>
     </rect>
    </property>
   </widget>
@@ -67,6 +67,12 @@ background-color: darkGray; width: 1px; height: 1px;
     <number>2</number>
    </attribute>
    <widget class="QWidget" name="renderParametersDockWidgetPlaceholder"/>
+  </widget>
+  <widget class="QDockWidget" name="clipPlanesDockWidget">
+   <attribute name="dockWidgetArea">
+    <number>2</number>
+   </attribute>
+   <widget class="QWidget" name="dockWidgetContents"/>
   </widget>
  </widget>
  <resources/>

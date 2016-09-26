@@ -7,6 +7,7 @@
 
 set(LIVRECORE_PUBLIC_HEADERS
   data/LODNode.h
+  data/Histogram.h
   data/NodeId.h
   data/MemoryUnit.h
   data/DataSourcePlugin.h
@@ -20,42 +21,43 @@ set(LIVRECORE_PUBLIC_HEADERS
 )
 
 set(LIVRECORE_HEADERS
-  dashTypes.h
   cache/Cache.h
   cache/CacheObject.h
   cache/CacheStatistics.h
   configuration/Configuration.h
   configuration/Parameters.h
-  dash/DashContextTrait.h
-  dash/DashRenderNode.h
-  dash/DashRenderStatus.h
-  dash/DashTree.h
   data/DataSource.h
-  dashpipeline/DashConnection.h
-  dashpipeline/DashProcessor.h
-  dashpipeline/DashProcessorInput.h
-  dashpipeline/DashProcessorOutput.h
   events/EventHandler.h
   events/EventHandlerFactory.h
   events/EventInfo.h
   events/EventMapper.h
-  maths/maths.h
   maths/Quantizer.h
-  pipeline/Connection.h
-  pipeline/Processor.h
-  pipeline/ProcessorInput.h
-  pipeline/ProcessorOutput.h
+  pipeline/Executable.h
+  pipeline/Filter.h
+  pipeline/FutureMap.h
+  pipeline/InputPort.h
+  pipeline/OutputPort.h
+  pipeline/PipeFilter.h
+  pipeline/Pipeline.h
+  pipeline/PortData.h
+  pipeline/FuturePromise.h
+  pipeline/PromiseMap.h
+  pipeline/SimpleExecutor.h
+  pipeline/Workers.h
+  render/ClipPlanes.cpp
   render/FrameInfo.h
   render/Frustum.h
-  render/RenderBrick.h
   render/Renderer.h
+  render/SelectVisibles.h
   render/TexturePool.h
   render/TextureState.h
   render/TransferFunction1D.h
   util/FrameUtils.h
   util/ThreadClock.h
+  visitor/DFSTraversal.h
   visitor/NodeVisitor.h
-  visitor/RenderNodeVisitor.h
+  visitor/DataSourceVisitor.h
+  visitor/DFSTraversal.h
   visitor/VisitState.h)
 
 set(LIVRECORE_SOURCES
@@ -64,42 +66,43 @@ set(LIVRECORE_SOURCES
   cache/CacheStatistics.cpp
   configuration/Configuration.cpp
   configuration/Parameters.cpp
-  dash/DashContextTrait.cpp
-  dash/DashRenderNode.cpp
-  dash/DashRenderStatus.cpp
-  dash/DashTree.cpp
   data/LODNode.cpp
+  data/Histogram.cpp
   data/MemoryUnit.cpp
   data/NodeId.cpp
   data/DataSource.cpp
   data/DataSourcePlugin.cpp
   data/VolumeInformation.cpp
-  dashpipeline/DashConnection.cpp
-  dashpipeline/DashProcessor.cpp
-  dashpipeline/DashProcessorInput.cpp
-  dashpipeline/DashProcessorOutput.cpp
   events/EventMapper.cpp
-  maths/maths.cpp
-  pipeline/Processor.cpp
-  pipeline/ProcessorInput.cpp
-  pipeline/ProcessorOutput.cpp
+  pipeline/Executable.cpp
+  pipeline/FutureMap.cpp
+  pipeline/InputPort.cpp
+  pipeline/OutputPort.cpp
+  pipeline/PipeFilter.cpp
+  pipeline/Pipeline.cpp
+  pipeline/FuturePromise.cpp
+  pipeline/PromiseMap.cpp
+  pipeline/SimpleExecutor.cpp
+  pipeline/Workers.cpp
+  render/ClipPlanes.cpp
   render/FrameInfo.cpp
   render/Frustum.cpp
   render/GLContext.cpp
   render/GLSLShaders.cpp
-  render/RenderBrick.cpp
   render/Renderer.cpp
+  render/SelectVisibles.cpp
   render/TexturePool.cpp
   render/TextureState.cpp
   render/TransferFunction1D.cpp
   util/FrameUtils.cpp
   util/ThreadClock.cpp
   util/Utilities.cpp
-  visitor/RenderNodeVisitor.cpp
+  visitor/DataSourceVisitor.cpp
+  visitor/DFSTraversal.cpp
   visitor/VisitState.cpp)
 
 set(LIVRECORE_LINK_LIBRARIES
-  PUBLIC ${Boost_LIBRARIES} dash Collage Lunchbox vmmlib
+  PUBLIC ${Boost_LIBRARIES} Collage Lexis Lunchbox vmmlib ZeroBuf
   PRIVATE Equalizer ${GLEW_MX_LIBRARIES})
 
 set(LIVRECORE_INCLUDE_NAME livre/core)

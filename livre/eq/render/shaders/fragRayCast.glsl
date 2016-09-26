@@ -5,16 +5,25 @@
  */
 
 // input variables to function
-
-#version 120
+#version 420 core
 #extension GL_ARB_texture_rectangle : enable
 
 #define EARLY_EXIT 0.999
 #define EPSILON 0.0000000001f
+#define SH_UINT 0
+#define SH_INT 1
+#define SH_FLOAT 2
 
-uniform sampler3D volumeTex; //gx, gy, gz, v
+uniform uint datatype;
+uniform sampler3D volumeTexFloat;
+uniform usampler3D volumeTexUint;
+uniform isampler3D volumeTexInt;
+
+uniform vec2 dataSourceRange;
+
 uniform sampler1D transferFnTex;
-uniform sampler2DRect frameBufferTex;
+layout( location = 0 ) out vec4 FragColor;
+layout( rgba32f ) uniform image2DRect renderTexture;
 
 uniform mat4 invProjectionMatrix;
 uniform mat4 invModelViewMatrix;
@@ -29,6 +38,8 @@ uniform vec3 textureMin;
 uniform vec3 textureMax;
 uniform vec3 voxelSpacePerWorldSpace;
 uniform vec3 worldEyePosition;
+uniform bool firstPass;
+uniform bool lastPass;
 
 uniform vec2 depthRange;
 
@@ -37,6 +48,9 @@ uniform int maxSamplesPerRay;
 uniform int nSamplesPerPixel;
 uniform float shininess;
 uniform int refLevel;
+
+uniform int nClipPlanes;
+uniform vec4 clipPlanes[6];
 
 struct Ray
 {
@@ -110,10 +124,9 @@ vec4 composite( vec4 src, vec4 dst, float alphaCorrection )
 
 void main( void )
 {
-    vec4 result = texture2DRect( frameBufferTex, gl_FragCoord.xy );
-
+    vec4 result = imageLoad( renderTexture, ivec2( gl_FragCoord.xy ));
     if( result.a > EARLY_EXIT )
-         discard;
+        discard;
 
     vec4 brickResult = vec4( 0.0f );
 
@@ -126,6 +139,7 @@ void main( void )
         vec4 subPixelCoord = gl_FragCoord + vec4( xPixelDelta, yPixelDelta, 0.0f, 0.0f );
         vec4 pixelEyeSpacePos = calcPositionInEyeSpaceFromWindowSpace( subPixelCoord );
         vec3 pixelWorldSpacePos = vec3(( invModelViewMatrix * pixelEyeSpacePos ).xyz );
+
         vec3 rayDirection = normalize( pixelWorldSpacePos - worldEyePosition );
         Ray eye = Ray( worldEyePosition, rayDirection );
 
@@ -155,6 +169,23 @@ void main( void )
         if( tnear > tfar )
             discard;
 
+        for( int i = 0; i < nClipPlanes; i++ )
+        {
+            vec3 planeNormal = clipPlanes[ i ].xyz;
+            float rn = dot( rayDirection, planeNormal );
+            if( rn == 0 )
+                rn = EPSILON;
+            float d = clipPlanes[ i ].w;
+            float t = -( dot( planeNormal, worldEyePosition ) + d ) / rn;
+            if( rn > 0.0 ) // opposite direction plane
+                tnear = max( tnear, t );
+            else
+                tfar = min( tfar, t );
+        }
+
+        if( tnear > tfar )
+            discard;
+
         vec3 rayStart = eye.Origin + eye.Dir * tnear;
         vec3 rayStop = eye.Origin + eye.Dir * tfar;
 
@@ -164,12 +195,24 @@ void main( void )
         vec3 pos = rayStart;
         vec3 step = normalize( rayStop - rayStart ) * stepSize;
 
+        //Used later for MAD optimization in the raymarching loop
+        const float multiplyer = 1 / ( dataSourceRange.g - dataSourceRange.r );
+        const float addedValue = -dataSourceRange.r / ( dataSourceRange.g - dataSourceRange.r );
+
         // Front-to-back absorption-emission integrator
         for ( float travel = distance( rayStop, rayStart ); travel > 0.0; pos += step, travel -= stepSize )
         {
             vec3 texPos = calcTexturePositionFromAABBPos( pos );
-            float density = texture3D( volumeTex, texPos ).r;
-            vec4 transferFn  = texture1D( transferFnTex, density );
+
+            float density = 0;
+            if( datatype == SH_UINT )
+                density = texture( volumeTexUint, texPos ).r * multiplyer + addedValue;
+            else if( datatype == SH_INT )
+                density = texture( volumeTexInt, texPos ).r * multiplyer + addedValue;
+            else if( datatype == SH_FLOAT )
+                density = texture( volumeTexFloat, texPos ).r * multiplyer + addedValue;
+
+            vec4 transferFn  = texture( transferFnTex, density );
             localResult = composite( transferFn, localResult, alphaCorrection );
 
             if( localResult.a > EARLY_EXIT )
@@ -177,5 +220,6 @@ void main( void )
         }
         brickResult += localResult;
     }
-    gl_FragColor = brickResult / nSamplesPerPixel;
+
+    imageStore( renderTexture, ivec2( gl_FragCoord.xy ), brickResult / nSamplesPerPixel );
 }

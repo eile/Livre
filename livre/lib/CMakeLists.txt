@@ -15,39 +15,38 @@ set(LIVRELIB_PUBLIC_HEADERS
   ${ZEROBUF_GENERATED_HEADERS}
   types.h
   animation/CameraPath.h
-  cache/TextureCache.h
-  cache/TextureDataCache.h
+  cache/DataObject.h
+  cache/HistogramObject.h
   cache/TextureObject.h
-  cache/TextureDataObject.h
-  data/MemoryDataSource.h
   configuration/ApplicationParameters.h
   configuration/VolumeRendererParameters.h
-  render/AvailableSetGenerator.h
-  uploaders/DataUploadProcessor.h
-  uploaders/TextureUploadProcessor.h
-  visitor/CollectionTraversal.h
-  visitor/DFSTraversal.h)
-
-set(LIVRELIB_HEADERS
-  render/SelectVisibles.h)
+  pipeline/DataUploadFilter.h
+  pipeline/HistogramFilter.h
+  pipeline/RenderFilter.h
+  pipeline/RenderingSetGeneratorFilter.h
+  pipeline/RenderPipeline.h
+  pipeline/VisibleSetGeneratorFilter.h
+  data/MemoryDataSource.h
+  data/RawDataSource.h)
 
 set(LIVRELIB_SOURCES
   ${ZEROBUF_GENERATED_SOURCES}
   animation/CameraPath.cpp
-  cache/TextureCache.cpp
-  cache/TextureDataCache.cpp
+  cache/DataObject.cpp
+  cache/HistogramObject.cpp
   cache/TextureObject.cpp
-  cache/TextureDataObject.cpp
-  data/MemoryDataSource.cpp
   configuration/ApplicationParameters.cpp
   configuration/VolumeRendererParameters.cpp
-  render/AvailableSetGenerator.cpp
-  uploaders/DataUploadProcessor.cpp
-  uploaders/TextureUploadProcessor.cpp
-  visitor/CollectionTraversal.cpp
-  visitor/DFSTraversal.cpp)
+  pipeline/DataUploadFilter.cpp
+  pipeline/HistogramFilter.cpp
+  pipeline/RenderFilter.cpp
+  pipeline/RenderingSetGeneratorFilter.cpp
+  pipeline/RenderPipeline.cpp
+  pipeline/VisibleSetGeneratorFilter.cpp
+  data/MemoryDataSource.cpp
+  data/RawDataSource.cpp)
 
-set(LIVRELIB_LINK_LIBRARIES PUBLIC LivreCore ZeroBuf
+set(LIVRELIB_LINK_LIBRARIES PUBLIC LivreCore
                             PRIVATE Equalizer ${VTUNE_LIBRARIES})
 
 set(LIVRELIB_INCLUDE_NAME livre/lib)

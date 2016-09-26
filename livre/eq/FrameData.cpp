@@ -144,6 +144,11 @@ VolumeSettings& FrameData::getVolumeSettings()
     return _impl->volumeSettings;
 }
 
+const VolumeSettings& FrameData::getVolumeSettings() const
+{
+    return _impl->volumeSettings;
+}
+
 const VolumeRendererParameters& FrameData::getVRParameters() const
 {
     return _impl->vrParameters;
@@ -180,12 +185,12 @@ void FrameData::unmap( eq::Config* config )
         config->unmapObject( _impl.get() );
 }
 
-bool FrameData::registerToConfig_( eq::Config* config )
+bool FrameData::registerToConfig( eq::Config* config )
 {
     return config->registerObject( _impl.get() );
 }
 
-bool FrameData::deregisterFromConfig_( eq::Config *config )
+bool FrameData::deregisterFromConfig( eq::Config *config )
 {
     config->deregisterObject( _impl.get() );
     return true;

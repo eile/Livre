@@ -25,9 +25,9 @@
 namespace livre
 {
 
-struct CacheObject::Status
+struct CacheObject::Impl
 {
-    Status( const CacheId& cacheId_ )
+    Impl( const CacheId& cacheId_ )
         : cacheId( cacheId_ )
     {}
 
@@ -36,61 +36,20 @@ struct CacheObject::Status
 };
 
 CacheObject::CacheObject( const CacheId& cacheId )
-    : _status( new Status( cacheId ) )
-{
-}
-
-bool CacheObject::isLoaded() const
-{
-    ReadLock lock( _status->mutex );
-    return _isValid() && _isLoaded();
-}
+    : _impl( new Impl( cacheId ) )
+{}
 
 CacheObject::~CacheObject()
 {}
 
-bool CacheObject::isValid() const
-{
-    ReadLock lock( _status->mutex );
-    return _isValid();
-}
-
 CacheId CacheObject::getId() const
 {
-    return _status->cacheId;
-}
-
-size_t CacheObject::getSize() const
-{
-    ReadLock lock( _status->mutex );
-    return _getSize();
-}
-
-bool CacheObject::_notifyLoad()
-{
-    WriteLock lock( _status->mutex );
-    return _load();
-}
-
-void CacheObject::_notifyUnload()
-{
-    WriteLock lock( _status->mutex );
-    _unload();
-}
-
-bool CacheObject::_isValid() const
-{
-    return _status->cacheId != INVALID_CACHE_ID;
-}
-
-size_t CacheObject::_getSize() const
-{
-    return 0;
+    return _impl->cacheId;
 }
 
 bool CacheObject::operator==( const CacheObject& cacheObject ) const
 {
-    return _status->cacheId == cacheObject.getId();
+    return _impl->cacheId == cacheObject.getId();
 }
 
 }

@@ -28,10 +28,10 @@ namespace livre
 
 enum ConfigEventType
 {
-    VOLUME_BOUNDING_BOX = eq::Event::USER,
-    GRAB_IMAGE,
+    GRAB_IMAGE = eq::Event::USER,
     VOLUME_FRAME_RANGE,
-    REDRAW
+    REDRAW,
+    HISTOGRAM_DATA
 };
 
 }

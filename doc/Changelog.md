@@ -2,13 +2,53 @@ Changelog {#Changelog}
 =========
 
 # master {#master}
+* [#331](https://github.com/BlueBrain/Livre/pull/331):
+  Multiple pass mode added for high quality images for data that does not fit into GPU cache
+* [#333](https://github.com/BlueBrain/Livre/pull/333):
+  Add animation-fps parameter to limit the animation frame rate
+* [#318](https://github.com/BlueBrain/Livre/pull/318):
+  * Added support for NRRD and Raw volumes
+* [#317](https://github.com/BlueBrain/Livre/pull/317):
+  * Added purge support for cache
+  * The cache objects now uses RAII for allocation of data
+  * Rename TextureDataCache to DataCache, TextureDataObject to DataObject
+* [#313](https://github.com/BlueBrain/Livre/pull/313):
+  Fixed the camera synchronization between applications.
+  Replaced the data bounding box by the data to Livre spaces
+  transform matrix computed by the datasource for camera
+  synchronization.
+* Added meterToDataUnitRatio parameter
+  computed by the datasource.
+* Fixed resolution printing.
 
+# Release 0.6 (2016-06-30)
+
+* [#315](https://github.com/BlueBrain/Livre/pull/315):
+  Clip planes support added. User can adjust the region
+  of interest.
+* [#302](https://github.com/BlueBrain/Livre/pull/302):
+  Histogram visualisation added to GUI.
+* [#301](https://github.com/BlueBrain/Livre/pull/301):
+  Histogram computation and ZeroEQ publishing.
+* [#303](https://github.com/BlueBrain/Livre/pull/303):
+  Old renderer is revived for OSX. Fix #296
+* [#256](https://github.com/BlueBrain/Livre/pull/256):
+  A new architecture for loading data, executing rendering
+  is implemented. There are preformance gains 2x to 10x
+  in frame rate and data upload.
+* [#291](https://github.com/BlueBrain/Livre/pull/291):
+  Livre uses OpenGL 4.2 for rendering ( removed copying-from-to
+  CPU memory )
+* [#265](https://github.com/BlueBrain/Livre/pull/265):
+  Livre uses the following ZeroBuf events: LookOut, imageJPEG, Frame,
+  VolumeRendererParameters, LookupTable1D. LivreGUI can load and save
+  the transfer function in .tf .1dt .lbb .lba formats
 * [#281](https://github.com/BlueBrain/Livre/pull/281):
   LivreGUI: Show progress bar for ongoing operations
 * [#279](https://github.com/BlueBrain/Livre/pull/279):
   Adapt to the renaming of zeq to ZeroEQ
 
-# Release 0.5 (2016-04-06) {#Release050}
+# Release 0.5 (2016-04-06)
 
 * [#270](https://github.com/BlueBrain/Livre/pull/270):
   Fix #113. SSE selection algorithm is simplified
@@ -27,7 +67,7 @@ Changelog {#Changelog}
 * [#219](https://github.com/BlueBrain/Livre/pull/219):
   LivreGUI: Editable frame range in animation panel
 
-# Release 0.4 (2015-11-09) {#Release040}
+# Release 0.4 (2015-11-09)
 
 * [#213](https://github.com/BlueBrain/Livre/pull/213):
   Fix [#207](https://github.com/BlueBrain/Livre/issues/207).
@@ -77,7 +117,7 @@ Changelog {#Changelog}
   Fix [LIV-157](https://bbpteam.epfl.ch/project/issues/browse/LIV-157)
   rendering of overlapping LOD nodes from different levels
 
-# Release 0.3 (2015-07-07) {#Release030}
+# Release 0.3 (2015-07-07)
 
 * [#37](https://github.com/BlueBrain/Livre/pull/37):
   New command line option to enable synchronous mode (wait until every block has
@@ -147,6 +187,6 @@ Changelog {#Changelog}
   Window title has been improved to show the application name and its version
   number
 
-# Release 0.2 (2014-10-15) {#Release020}
+# Release 0.2 (2014-10-15)
 
 * BBP internal release

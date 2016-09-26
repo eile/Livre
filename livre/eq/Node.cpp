@@ -30,13 +30,12 @@
 #include <livre/eq/Event.h>
 
 #include <livre/eq/settings/VolumeSettings.h>
-#include <livre/lib/cache/TextureDataCache.h>
 #include <livre/lib/configuration/VolumeRendererParameters.h>
-#include <livre/lib/uploaders/DataUploadProcessor.h>
-#include <livre/core/dash/DashRenderStatus.h>
-#include <livre/core/dash/DashTree.h>
-#include <livre/core/dashpipeline/DashProcessorOutput.h>
+#include <livre/lib/cache/DataObject.h>
+#include <livre/lib/cache/HistogramObject.h>
+
 #include <livre/core/data/DataSource.h>
+#include <livre/core/cache/Cache.h>
 
 #include <eq/eq.h>
 #include <eq/gl.h>
@@ -56,24 +55,21 @@ public:
         const VolumeRendererParameters& vrRenderParameters =
                 _config->getFrameData().getVRParameters();
 
-        const size_t maxMemBytes =
-                vrRenderParameters.getMaxCPUCacheMemoryMB() * LB_1MB;
+        const size_t maxMemBytes = vrRenderParameters.getMaxCPUCacheMemoryMB() * LB_1MB;
+        _dataCache.reset( new CacheT< DataObject >( "DataCache", maxMemBytes ));
 
-        _textureDataCache.reset( new livre::TextureDataCache( maxMemBytes,
-                                                              *_dataSource.get(),
-                                                              GL_UNSIGNED_BYTE ));
+        const size_t histCacheSize =
+                32 * LB_1MB; // Histogram cache is 32 MB. Can hold approx 16k hists
+        _histogramCache.reset( new CacheT< HistogramObject >( "HistogramCache", histCacheSize ));
     }
 
     bool initializeVolume()
     {
         try
         {
-            const VolumeSettings& volumeSettings =
-                    _config->getFrameData().getVolumeSettings();
+            const VolumeSettings& volumeSettings = _config->getFrameData().getVolumeSettings();
             const lunchbox::URI& uri = lunchbox::URI( volumeSettings.getURI( ));
-            dash::Context::getMain(); // Create the main context
             _dataSource.reset( new livre::DataSource( uri ));
-            _dashTree.reset( new livre::DashTree( *_dataSource ));
         }
         catch( const std::runtime_error& err )
         {
@@ -104,17 +100,15 @@ public:
     {
         _dataSource->update();
 
-        const livre::VolumeInformation& info =
-                _dataSource->getVolumeInfo();
-
+        const livre::VolumeInformation& info = _dataSource->getVolumeInfo();
         _config->sendEvent( VOLUME_FRAME_RANGE ) << info.frameRange;
     }
 
     livre::Node* const _node;
     livre::Config* const _config;
     std::unique_ptr< DataSource > _dataSource;
-    std::unique_ptr< TextureDataCache > _textureDataCache;
-    std::unique_ptr< livre::DashTree > _dashTree;
+    std::unique_ptr< Cache > _dataCache;
+    std::unique_ptr< Cache > _histogramCache;
 };
 
 Node::Node( eq::Config* parent )
@@ -160,19 +154,24 @@ bool Node::configExit()
     return eq::Node::configExit();
 }
 
-TextureDataCache& Node::getTextureDataCache()
+DataSource& Node::getDataSource()
 {
-    return *_impl->_textureDataCache;
+    return *_impl->_dataSource;
 }
 
-DashTree& Node::getDashTree()
+const DataSource& Node::getDataSource() const
 {
-    return *_impl->_dashTree;
+    return *_impl->_dataSource;
 }
 
-const DashTree& Node::getDashTree() const
+Cache& Node::getDataCache()
 {
-    return *_impl->_dashTree;
+    return *_impl->_dataCache;
+}
+
+livre::Cache& livre::Node::getHistogramCache()
+{
+    return *_impl->_histogramCache;
 }
 
 void Node::frameStart( const eq::uint128_t &frameId,

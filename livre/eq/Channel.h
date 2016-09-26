@@ -48,7 +48,6 @@ private:
                       const eq::Frames& inFrames,
                       const eq::Frames& outFrames ) final;
     void frameDraw( const eq::uint128_t& frameId ) final;
-    void frameFinish( const eq::uint128_t&, const uint32_t ) final;
     void frameViewStart( const eq::uint128_t& frameId ) final;
     void frameViewFinish( const eq::uint128_t &frameID ) final;
     void frameAssemble( const eq::uint128_t&, const eq::Frames& ) final;

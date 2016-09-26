@@ -31,11 +31,10 @@ namespace livre
 /** Voxel data type in a volume */
 enum DataType
 {
-    DT_FLOAT32,
+    DT_FLOAT,
     DT_UINT8,
     DT_UINT16,
     DT_UINT32,
-    DT_FLOAT64,
     DT_INT8,
     DT_INT16,
     DT_INT32,
@@ -72,28 +71,28 @@ struct VolumeInformation
      */
     Vector3ui maximumBlockSize;
 
-    /**
-     * The minimum position of a volume.
-     */
-    Vector3f minPos;
-
-    /**
-     * The maximum position of a volume.
-     */
-    Vector3f maxPos;
-
     Vector3ui voxels; //!< The size (number of voxels) in each dimension
 
     /** The normalized size of the volume. */
     Vector3f worldSize;
 
-    /** Real-world size of the volume in meters. */
-    Boxf boundingBox;
+    /** The transformation matrix between data space and livre space */
+    Matrix4f dataToLivreTransform;
+
+    /** The resolution in "data units"/voxel. Only valid for some datasources,
+     * ( -1, -1, -1) otherwise.
+     */
+    Vector3f resolution;
 
     /**
      * The world space per voxel. Assumes the volume is isotropic.
      */
     float worldSpacePerVoxel;
+
+    /**
+     * The ratio between a meter and the unit used by the data.
+     */
+    float meterToDataUnitRatio;
 
     /**
       * Root node info
