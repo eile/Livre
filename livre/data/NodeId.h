@@ -65,8 +65,8 @@ public:
      * @param position Position in the current level of octree
      * @param timeStep The temporal coordinate of the volume
      */
-    LIVREDATA_API NodeId(const uint32_t level, const Vector3ui& position,
-                         const uint32_t timeStep = 0);
+    LIVREDATA_API NodeId(uint32_t level, const Vector3ui& position,
+                         uint32_t timeStep = 0);
 
     LIVREDATA_API uint32_t getLevel() const
     {
@@ -88,8 +88,8 @@ public:
         const NodeId& parentNodeId) const; //!< Is parentNodeId my parent
     LIVREDATA_API bool isChild(const NodeId& childNodeId) const; //!< Is
                                                                  //! childNodeId
-    //! my child
-    LIVREDATA_API bool isValid() const
+                                                                 //! my child
+    bool isValid() const
     {
         return _level != INVALID_LEVEL;
     }                                          //!< Is valid node id
@@ -99,61 +99,43 @@ public:
     LIVREDATA_API NodeIds getChildrenAtLevel(
         const uint32_t level) const;      //<! Returns children at level
     LIVREDATA_API Range getRange() const; //<! Normalized data range within tree
-    LIVREDATA_API uint64_t getId() const
-    {
-        return _id;
-    } //<! Returns the unique identifier
+    uint64_t getId() const { return _id; } //<! Returns the unique identifier
 
     /**
      * @param node The node which is compared against
      * @return true if two nodes have the same id
      */
-    LIVREDATA_API bool operator==(const NodeId& node) const
-    {
-        return _id == node._id;
-    }
+    bool operator==(const NodeId& node) const { return _id == node._id; }
 
     /**
      * @param id The identifier which is compared against
      * @return true if the nodes have the same id
      */
-    LIVREDATA_API bool operator==(const uint64_t id) const { return _id == id; }
+    bool operator==(const uint64_t id) const { return _id == id; }
 
     /**
      * @param node The node which is compared against
      * @return false if two nodes have the same id
      */
-    LIVREDATA_API bool operator!=(const NodeId& node) const
-    {
-        return _id != node._id;
-    }
+    bool operator!=(const NodeId& node) const { return _id != node._id; }
 
     /**
      * @param id The identifier which is compared against
      * @return false if two nodes have the same id
      */
-    LIVREDATA_API bool operator!=(const uint64_t id) const
-    {
-        return _id != id;
-    } //<! Checks equality of the node
+    bool operator!=(const uint64_t id) const { return _id != id; }
 
     /**
      * @param node The node which is compared against
      * @return true if node id is smaller
      */
-    LIVREDATA_API bool operator<(const NodeId& node) const
-    {
-        return _id < node._id;
-    } //<! Checks equality of the node
+    bool operator<(const NodeId& node) const { return _id < node._id; }
 
     /**
      * @param id The identifier which is compared against
      * @return true if id is smaller
      */
-    LIVREDATA_API bool operator<(const uint64_t id) const
-    {
-        return _id < id;
-    } //<! Checks equality of the node
+    bool operator<(const uint64_t id) const { return _id < id; }
 };
 
 /**

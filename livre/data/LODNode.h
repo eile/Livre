@@ -63,10 +63,7 @@ public:
      *
      * @return Blockwise position level resolution.
      */
-    LIVREDATA_API Vector3ui getAbsolutePosition() const
-    {
-        return _nodeId.getPosition();
-    }
+    Vector3ui getAbsolutePosition() const { return _nodeId.getPosition(); }
 
     /** @return the relative node position in normalized coordinates. */
     LIVREDATA_API Vector3f getRelativePosition() const;
@@ -74,28 +71,28 @@ public:
     /**
      * @return Voxel extents in reflevel resolution.
      */
-    LIVREDATA_API const Boxui& getVoxelBox() const { return _localVoxelBox; }
+    const Boxui& getVoxelBox() const { return _localVoxelBox; }
     /**
      * @return The box in world coordinates.
      */
-    LIVREDATA_API const Boxf& getWorldBox() const { return _worldBox; }
+    const Boxf& getWorldBox() const { return _worldBox; }
     /**
      * @return The tree level.
      */
-    LIVREDATA_API uint32_t getRefLevel() const { return _nodeId.getLevel(); }
+    uint32_t getRefLevel() const { return _nodeId.getLevel(); }
     /**
      * @return The unique node id.
      */
-    LIVREDATA_API NodeId getNodeId() const { return _nodeId; }
+    NodeId getNodeId() const { return _nodeId; }
     /**
      * @return True if node is valid.
      */
-    LIVREDATA_API bool isValid() const { return _nodeId.isValid(); }
+    bool isValid() const { return _nodeId.isValid(); }
     /**
      * @param node The node to compare.
      * @return True if nodeId's are same.
      */
-    LIVREDATA_API bool operator==(const LODNode& node) const
+    bool operator==(const LODNode& node) const
     {
         return _nodeId == node._nodeId;
     }
@@ -107,7 +104,8 @@ public:
     LIVREDATA_API bool isParent(const LODNode& parentNode) const;
 
     /** @return the size of the block without paddings */
-    LIVREDATA_API const Vector3ui& getBlockSize() const { return _blockSize; }
+    const Vector3ui& getBlockSize() const { return _blockSize; }
+
 private:
     const NodeId _nodeId;
 

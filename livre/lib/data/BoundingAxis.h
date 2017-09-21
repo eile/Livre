@@ -25,9 +25,7 @@
 
 namespace livre
 {
-/**
- * The BoundingAxis class create and redner bounding axis of a volume
- */
+/** Renders the bounding axis of a volume */
 class BoundingAxis
 {
     struct BoundingAxisData

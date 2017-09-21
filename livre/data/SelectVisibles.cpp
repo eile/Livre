@@ -91,14 +91,14 @@ struct SelectVisibles::Impl
 
         const Vector3f& voxelBox = lodNode.getVoxelBox().getSize();
         const Vector3f& worldSpacePerVoxel = worldBox.getSize() / voxelBox;
-
-        bool lodVisible = isLODVisible(vmin, worldSpacePerVoxel.find_min());
+        const auto level = lodNode.getRefLevel();
+        bool lodVisible = isLODVisible(vmin, worldSpacePerVoxel.find_min()) &&
+                          level >= _minLOD;
 
         const VolumeInformation& volInfo = _dataSource.getVolumeInfo();
         const uint32_t depth = volInfo.rootNode.getDepth();
-        lodVisible = (lodVisible && lodNode.getRefLevel() >= _minLOD) ||
-                     (lodNode.getRefLevel() == _maxLOD) ||
-                     (lodNode.getRefLevel() == depth - 1);
+        if (level == _maxLOD || level == depth - 1)
+            lodVisible = true;
 
         if (lodVisible)
             _visibles.push_back(lodNode.getNodeId());
