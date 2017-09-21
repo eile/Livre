@@ -88,7 +88,6 @@ public:
     explicit Impl(Config& config_)
         : config(config_)
         , frameStart(config.getTime())
-        , volumeBBox(Boxf::makeUnitBox())
     {
     }
 
@@ -186,8 +185,6 @@ public:
     bool redraw = true;
     VolumeInformation volumeInfo;
     int64_t frameStart;
-
-    Boxf volumeBBox;
 
     ViewHistogramQueue histogramQueue;
     Histogram histogram;

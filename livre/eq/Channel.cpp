@@ -64,9 +64,6 @@
 
 namespace livre
 {
-const float nearPlane = 0.1f;
-const float farPlane = 15.0f;
-
 struct RedrawFilter : public Filter
 {
     explicit RedrawFilter(Channel* channel)
@@ -74,7 +71,6 @@ struct RedrawFilter : public Filter
     {
     }
 
-    ~RedrawFilter() {}
     void execute(const FutureMap& input, PromiseMap&) const final
     {
         waitForAny(input.getFutures());
@@ -100,7 +96,6 @@ struct SendHistogramFilter : public Filter
     {
     }
 
-    ~SendHistogramFilter() {}
     void execute(const FutureMap& inputs, PromiseMap&) const final
     {
         const auto viewport = inputs.get<Viewport>("RelativeViewport").front();
@@ -150,12 +145,6 @@ public:
         : _channel(channel)
         , _progress("Loading bricks", 0)
     {
-    }
-
-    void initializeFrame()
-    {
-        _channel->setNearFar(nearPlane, farPlane);
-
         eq::FrameDataPtr frameData = new eq::FrameData();
         frameData->setBuffers(eq::Frame::Buffer::color);
         _frame.setFrameData(frameData);
@@ -337,7 +326,6 @@ public:
 
     void configInit()
     {
-        initializeFrame();
         initializeRenderer();
         _channel->addResultImageListener(&_frameGrabber);
     }
