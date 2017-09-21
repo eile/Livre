@@ -27,12 +27,11 @@ namespace livre
 {
 struct SelectVisibles::Impl
 {
-    Impl(const DataSource& dataSource, const Frustum& frustum,
-         const uint32_t windowHeight, const float screenSpaceError,
-         const uint32_t minLOD, const uint32_t maxLOD, const Range& range,
+    Impl(const Frustum& frustum, const uint32_t windowHeight,
+         const float screenSpaceError, const uint32_t minLOD,
+         const uint32_t maxLOD, const Range& range,
          const ClipPlanes& clipPlanes)
-        : _dataSource(dataSource)
-        , _frustum(frustum)
+        : _frustum(frustum)
         , _windowHeight(windowHeight)
         , _screenSpaceError(screenSpaceError)
         , _minLOD(minLOD)
@@ -95,9 +94,7 @@ struct SelectVisibles::Impl
         bool lodVisible = isLODVisible(vmin, worldSpacePerVoxel.find_min()) &&
                           level >= _minLOD;
 
-        const VolumeInformation& volInfo = _dataSource.getVolumeInfo();
-        const uint32_t depth = volInfo.rootNode.getDepth();
-        if (level == _maxLOD || level == depth - 1)
+        if (level == _maxLOD)
             lodVisible = true;
 
         if (lodVisible)
@@ -130,7 +127,6 @@ struct SelectVisibles::Impl
         _visibles.swap(selected);
     }
 
-    const DataSource& _dataSource;
     const Frustum _frustum;
     const uint32_t _windowHeight;
     const float _screenSpaceError;
@@ -141,16 +137,14 @@ struct SelectVisibles::Impl
     const ClipPlanes _clipPlanes;
 };
 
-SelectVisibles::SelectVisibles(const DataSource& dataSource,
-                               const Frustum& frustum,
+SelectVisibles::SelectVisibles(const Frustum& frustum,
                                const uint32_t windowHeight,
                                const float screenSpaceError,
                                const uint32_t minLOD, const uint32_t maxLOD,
                                const Range& range, const ClipPlanes& clipPlanes)
-    : DataSourceVisitor(dataSource)
-    , _impl(new SelectVisibles::Impl(dataSource, frustum, windowHeight,
-                                     screenSpaceError, minLOD, maxLOD, range,
-                                     clipPlanes))
+    : NodeVisitor()
+    , _impl(new SelectVisibles::Impl(frustum, windowHeight, screenSpaceError,
+                                     minLOD, maxLOD, range, clipPlanes))
 {
 }
 

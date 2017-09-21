@@ -20,14 +20,14 @@
 #ifndef _SelectVisibles_h_
 #define _SelectVisibles_h_
 
-#include <livre/data/DataSourceVisitor.h>
 #include <livre/data/Frustum.h>
+#include <livre/data/NodeVisitor.h>
 #include <livre/data/types.h>
 
 namespace livre
 {
 /** Selects all visible rendering nodes */
-class SelectVisibles : public DataSourceVisitor
+class SelectVisibles : public NodeVisitor
 {
 public:
     /**
@@ -41,10 +41,10 @@ public:
      * @param range range of the data
      * @param ClipPlanes clip planes
      */
-    SelectVisibles(const DataSource& dataSource, const Frustum& frustum,
-                   const uint32_t windowHeight, const float screenSpaceError,
-                   const uint32_t minLOD, const uint32_t maxLOD,
-                   const Range& range, const ClipPlanes& clipPlanes);
+    SelectVisibles(const Frustum& frustum, const uint32_t windowHeight,
+                   const float screenSpaceError, const uint32_t minLOD,
+                   const uint32_t maxLOD, const Range& range,
+                   const ClipPlanes& clipPlanes);
 
     ~SelectVisibles();
 

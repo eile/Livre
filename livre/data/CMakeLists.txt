@@ -8,7 +8,6 @@
 set(LIVREDATA_PUBLIC_HEADERS
   DataSource.h
   DataSourcePlugin.h
-  DataSourceVisitor.h
   DFSTraversal.h
   Frustum.h
   LODNode.h
@@ -25,7 +24,6 @@ set(LIVREDATA_PUBLIC_HEADERS
 set(LIVREDATA_SOURCES
   DataSource.cpp
   DataSourcePlugin.cpp
-  DataSourceVisitor.cpp
   DFSTraversal.cpp
   Frustum.cpp
   LODNode.cpp

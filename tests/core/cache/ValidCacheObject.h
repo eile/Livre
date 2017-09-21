@@ -32,12 +32,13 @@ public:
     /**
      * Constructor
      */
-    ValidCacheObject(const livre::CacheId& cacheId)
+    ValidCacheObject(const uint64_t cacheId)
         : livre::CacheObject(cacheId)
     {
     }
 
     size_t getSize() const final { return OBJECT_SIZE; }
+
 private:
 };
 

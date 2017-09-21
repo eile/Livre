@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, EPFL/Blue Brain Project
+/* Copyright (c) 2011-2017, EPFL/Blue Brain Project
  *                     Ahmet Bilgili <ahmet.bilgili@epfl.ch>
  *
  * This file is part of Livre <https://github.com/BlueBrain/Livre>
@@ -35,7 +35,7 @@ BOOST_AUTO_TEST_CASE(testCache)
     BOOST_CHECK_EQUAL(cache.getStatistics().getMaximumMemory(), maxMemBytes);
 
     livre::CacheObjectPtr validCacheObject(new test::ValidCacheObject(0));
-    BOOST_CHECK_EQUAL(validCacheObject->getId(), 0);
+    BOOST_CHECK_EQUAL(validCacheObject->id, 0);
 
     livre::ConstCacheObjectPtr constCacheObject = cache.get(1);
 
@@ -50,7 +50,7 @@ BOOST_AUTO_TEST_CASE(testCache)
     cacheObject = cache.load<test::ValidCacheObject>(2);
     BOOST_CHECK(cacheObject);
     BOOST_CHECK_EQUAL(cache.getCount(), 2);
-    BOOST_CHECK_EQUAL(cacheObject->getId(), 2);
+    BOOST_CHECK_EQUAL(cacheObject->id, 2);
     BOOST_CHECK_EQUAL(cacheObject.use_count(), 2);
     cacheSize = cacheSize + cacheObject->getSize();
     BOOST_CHECK_EQUAL(cache.getStatistics().getUsedMemory(), cacheSize);
@@ -58,7 +58,7 @@ BOOST_AUTO_TEST_CASE(testCache)
     cacheObject = cache.load<test::ValidCacheObject>(1);
     BOOST_CHECK(cacheObject);
     BOOST_CHECK_EQUAL(cache.getCount(), 2);
-    BOOST_CHECK_EQUAL(cacheObject->getId(), 1);
+    BOOST_CHECK_EQUAL(cacheObject->id, 1);
     BOOST_CHECK_EQUAL(cacheObject.use_count(), 2);
     BOOST_CHECK_EQUAL(cache.getStatistics().getUsedMemory(), cacheSize);
     cacheObject.reset();
@@ -68,7 +68,7 @@ BOOST_AUTO_TEST_CASE(testCache)
     BOOST_CHECK(cacheObjectTriggerClean);
 
     BOOST_CHECK_EQUAL(cache.getCount(), 2);
-    BOOST_CHECK_EQUAL(cacheObjectTriggerClean->getId(), 3);
+    BOOST_CHECK_EQUAL(cacheObjectTriggerClean->id, 3);
     BOOST_CHECK_EQUAL(cacheObjectTriggerClean.use_count(), 2);
     BOOST_CHECK_EQUAL(cache.getStatistics().getUsedMemory(), cacheSize);
 

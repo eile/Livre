@@ -26,12 +26,17 @@ namespace livre
 struct DFSTraversal::Impl
 {
 public:
+    Impl(const DataSource& s)
+        : source(s)
+    {
+    }
+
     void traverse(const NodeId& nodeId, const uint32_t depth,
                   livre::NodeVisitor& visitor)
     {
         assert(depth > 0);
 
-        if (!visitor.visit(nodeId))
+        if (!visitor.visit(source.getNode(nodeId)))
             return;
 
         if (depth == 1)
@@ -41,36 +46,30 @@ public:
         for (const NodeId& childNodeId : nodeIds)
             traverse(childNodeId, depth - 1, visitor);
     }
+
+    const DataSource& source;
 };
 
-DFSTraversal::DFSTraversal()
-    : _impl(new DFSTraversal::Impl())
+DFSTraversal::DFSTraversal(const DataSource& source)
+    : _impl(new DFSTraversal::Impl(source))
 {
 }
 
-DFSTraversal::~DFSTraversal()
-{
-}
+DFSTraversal::~DFSTraversal() = default;
 
-void DFSTraversal::traverse(const RootNode& rootNode, const NodeId& node,
-                            NodeVisitor& visitor)
+void DFSTraversal::traverse(NodeVisitor& visitor, const uint32_t timeStep)
 {
-    visitor.visitPre();
-    _impl->traverse(node, rootNode.getDepth(), visitor);
-    visitor.visitPost();
-}
-
-void DFSTraversal::traverse(const RootNode& rootNode, NodeVisitor& visitor,
-                            const uint32_t timeStep)
-{
-    visitor.visitPre();
+    const auto& rootNode = _impl->source.getVolumeInfo().rootNode;
+    const auto depth = rootNode.getDepth();
     const Vector3ui& blockSize = rootNode.getBlockSize();
+
+    visitor.visitPre();
     for (uint32_t x = 0; x < blockSize.x(); ++x)
         for (uint32_t y = 0; y < blockSize.y(); ++y)
             for (uint32_t z = 0; z < blockSize.z(); ++z)
             {
-                _impl->traverse(NodeId(0, Vector3ui(x, y, z), timeStep),
-                                rootNode.getDepth(), visitor);
+                _impl->traverse(NodeId(0, Vector3ui(x, y, z), timeStep), depth,
+                                visitor);
             }
     visitor.visitPost();
 }

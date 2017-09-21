@@ -33,13 +33,16 @@
 // is not in the LD_LIBRARY_PATH of the test executable.
 lunchbox::PluginRegisterer<livre::MemoryDataSource> registerer;
 
-typedef std::vector<livre::Identifier> Identifiers;
+typedef std::vector<uint64_t> Identifiers;
 
 Identifiers getVisibles(const livre::DataSource& dataSource,
                         const uint32_t windowHeight,
                         const float screenSpaceError, const uint32_t minLOD,
-                        const uint32_t maxLOD)
+                        uint32_t maxLOD)
 {
+    maxLOD =
+        std::min(maxLOD, dataSource.getVolumeInfo().rootNode.getDepth() - 1);
+
     const float projArray[] = {
         2.0, 0,           0,  0, 0, 2.0,          0, 0, 0,
         0,   -1.01342285, -1, 0, 0, -0.201342285, 0};
@@ -52,12 +55,12 @@ Identifiers getVisibles(const livre::DataSource& dataSource,
     const livre::Frustum frustum(mvMat, projMat);
 
     livre::ClipPlanes planes;
-    livre::SelectVisibles selectVisibles(dataSource, frustum, windowHeight,
+    livre::SelectVisibles selectVisibles(frustum, windowHeight,
                                          screenSpaceError, minLOD, maxLOD,
                                          {{0.0f, 1.0f}}, planes);
 
-    livre::DFSTraversal traverser;
-    traverser.traverse(dataSource.getVolumeInfo().rootNode, selectVisibles, 0);
+    livre::DFSTraversal traverser(dataSource);
+    traverser.traverse(selectVisibles, 0);
 
     Identifiers visibles;
     for (const livre::NodeId& nodeId : selectVisibles.getVisibles())
@@ -185,7 +188,7 @@ BOOST_AUTO_TEST_CASE(testLODSelection)
                                       visibles.data(),
                                       visibles.data() + visibles.size());
 
-        for (const livre::Identifier& visible : visibles)
+        for (const uint64_t visible : visibles)
             BOOST_CHECK_EQUAL(livre::NodeId(visible).getLevel(), maxMinLevel);
     }
 
@@ -202,7 +205,7 @@ BOOST_AUTO_TEST_CASE(testLODSelection)
                                       visibles.data(),
                                       visibles.data() + visibles.size());
 
-        for (const livre::Identifier& visible : visibles)
+        for (const uint64_t visible : visibles)
             BOOST_CHECK_EQUAL(livre::NodeId(visible).getLevel(), maxMinLevel);
     }
 }

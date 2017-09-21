@@ -52,14 +52,15 @@ struct VisibleSetGeneratorFilter::Impl
         const uint32_t windowHeight = vp[3];
         const float sse = params.getScreenSpaceError();
         const uint32_t minLOD = params.getMinLod();
-        const uint32_t maxLOD = params.getMaxLod();
+        const uint32_t maxLOD =
+            std::min(params.getMaxLod(),
+                     _dataSource.getVolumeInfo().rootNode.getDepth() - 1);
 
-        SelectVisibles visitor(_dataSource, frustum, windowHeight, sse, minLOD,
-                               maxLOD, range, clipPlanes);
+        SelectVisibles visitor(frustum, windowHeight, sse, minLOD, maxLOD,
+                               range, clipPlanes);
 
-        DFSTraversal traverser;
-        traverser.traverse(_dataSource.getVolumeInfo().rootNode, visitor,
-                           frame);
+        DFSTraversal traverser(_dataSource);
+        traverser.traverse(visitor, frame);
 
         output.set("VisibleNodes", visitor.getVisibles());
         output.set("Params", params);
