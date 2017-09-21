@@ -125,7 +125,7 @@ struct Cache::Impl
     ConstCacheObjectPtr load(ConstCacheObjectPtr obj)
     {
         WriteLock writeLock(_mutex);
-        const uint64_t cacheId = obj->getId();
+        const uint64_t cacheId = obj->id;
         ConstCacheMap::const_iterator it = _cacheMap.find(cacheId);
         if (it != _cacheMap.end())
             return it->second;
@@ -220,7 +220,7 @@ Cache::~Cache()
 
 ConstCacheObjectPtr Cache::_load(ConstCacheObjectPtr obj)
 {
-    if (obj->getId() == INVALID_CACHE_ID)
+    if (obj->id == INVALID_CACHE_ID)
         return ConstCacheObjectPtr();
 
     return _impl->load(obj);

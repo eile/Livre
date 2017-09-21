@@ -37,7 +37,6 @@ set(LIVRECORE_HEADERS
 
 set(LIVRECORE_SOURCES
   cache/Cache.cpp
-  cache/CacheObject.cpp
   cache/CacheStatistics.cpp
   pipeline/Executable.cpp
   pipeline/FutureMap.cpp

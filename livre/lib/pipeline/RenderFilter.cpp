@@ -46,7 +46,7 @@ struct RenderFilter::Impl
                 const ConstTextureObjectPtr& texture =
                     std::static_pointer_cast<const TextureObject>(cacheObject);
 
-                renderBricks.emplace_back(texture->getId());
+                renderBricks.emplace_back(texture->id);
             }
         }
 
