@@ -28,7 +28,7 @@ namespace livre
 struct DataObject::Impl
 {
 public:
-    Impl(const CacheId& cacheId, DataSource& dataSource)
+    Impl(const uint64_t cacheId, DataSource& dataSource)
     {
         if (!load(cacheId, dataSource))
             LBTHROW(
@@ -38,7 +38,7 @@ public:
 
     ~Impl() {}
     const void* getDataPtr() const { return _data->getData<void>(); }
-    bool load(const CacheId& cacheId, DataSource& dataSource)
+    bool load(const uint64_t cacheId, DataSource& dataSource)
     {
         const NodeId nodeId(cacheId);
         _data = dataSource.getData(nodeId);
@@ -48,7 +48,7 @@ public:
     ConstMemoryUnitPtr _data;
 };
 
-DataObject::DataObject(const CacheId& cacheId, DataSource& dataSource)
+DataObject::DataObject(const uint64_t cacheId, DataSource& dataSource)
     : CacheObject(cacheId)
     , _impl(new Impl(cacheId, dataSource))
 {

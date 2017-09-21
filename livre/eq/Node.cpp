@@ -147,7 +147,7 @@ bool Node::configInit(const eq::uint128_t& initId)
     if (!_impl->configInit())
         return false;
 
-    livre::Client* client = static_cast<livre::Client*>(getClient().get());
+    Client* client = static_cast<Client*>(getClient().get());
     client->setIdleFunction(std::bind(&Impl::updateDataSource, _impl.get()));
 
     return true;
@@ -155,7 +155,7 @@ bool Node::configInit(const eq::uint128_t& initId)
 
 bool Node::configExit()
 {
-    livre::Client* client = static_cast<livre::Client*>(getClient().get());
+    Client* client = static_cast<Client*>(getClient().get());
     client->setIdleFunction(IdleFunc());
     if (!isApplicationNode())
     {

@@ -89,7 +89,7 @@ struct HistogramFilter::Impl
             for (const auto& cacheObject :
                  cacheObjects.get<ConstCacheObjects>())
             {
-                const CacheId& cacheId = cacheObject->getId();
+                const uint64_t cacheId = cacheObject->getId();
 
                 // Hist cache object expands the data source range if data has
                 // larger values

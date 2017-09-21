@@ -31,12 +31,12 @@ namespace livre
 class CacheLoadException : public std::exception
 {
 public:
-    CacheLoadException(const Identifier& id, const std::string& message);
+    CacheLoadException(uint64_t id, const std::string& message);
     ~CacheLoadException() throw() {}
     char const* what() const throw();
 
 private:
-    Identifier _id;
+    uint64_t _id;
     std::string _message;
 };
 
@@ -58,7 +58,7 @@ public:
      * empty cache
      * object is returned.
      */
-    LIVRECORE_API ConstCacheObjectPtr get(const CacheId& cacheId) const;
+    LIVRECORE_API ConstCacheObjectPtr get(uint64_t cacheId) const;
 
     /**
      * Gets the cached object from the cache with a given type and d
@@ -70,7 +70,7 @@ public:
      */
     template <class CacheObjectT>
     LIVRECORE_API std::shared_ptr<const CacheObjectT> get(
-        const CacheId& cacheId) const
+        const uint64_t cacheId) const
     {
         if (_getCacheObjectType() != getType<CacheObjectT>())
             LBTHROW(std::runtime_error(
@@ -89,7 +89,7 @@ public:
      * @param cacheId The object cache id to be unloaded.
      * @return false if object is not unloaded or cacheId is invalid
      */
-    LIVRECORE_API bool unload(const CacheId& cacheId);
+    LIVRECORE_API bool unload(uint64_t cacheId);
 
     /**
      * @return The number of cache objects managed.
@@ -108,7 +108,7 @@ public:
      */
     template <class CacheObjectT, class... Args>
     LIVRECORE_API std::shared_ptr<const CacheObjectT> load(
-        const CacheId& cacheId, Args&&... args)
+        const uint64_t cacheId, Args&&... args)
     {
         if (_getCacheObjectType() != getType<CacheObjectT>())
             LBTHROW(std::runtime_error("The cache does not support the type"));
@@ -155,7 +155,7 @@ public:
      * and they will be in memory until no reference is left.
      * @param cacheId The object cache id to be purged.
      */
-    LIVRECORE_API void purge(const CacheId& cacheId);
+    LIVRECORE_API void purge(uint64_t cacheId);
 
 protected:
     /**

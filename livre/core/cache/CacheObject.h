@@ -37,7 +37,7 @@ public:
     virtual size_t getSize() const = 0;
 
     /** @return The unique cache id. */
-    LIVRECORE_API CacheId getId() const;
+    LIVRECORE_API uint64_t getId() const;
 
     /** @return On default returns true if cache ids are same */
     virtual bool operator==(const CacheObject& cacheObject) const;
@@ -48,8 +48,7 @@ protected:
      * The inheriting class should throw CacheLoadException if the object can
      * not be constructed
      */
-    LIVRECORE_API explicit CacheObject(
-        const CacheId& cacheId = INVALID_CACHE_ID);
+    LIVRECORE_API explicit CacheObject(uint64_t cacheId = INVALID_CACHE_ID);
 
 private:
     struct Impl;

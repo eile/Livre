@@ -34,17 +34,17 @@ class NodeId
     union {
         struct
         {
-            Identifier _level : NODEID_LEVEL_BITS; //>! Maximum 15 levels
-            Identifier _blockPosX
+            uint64_t _level : NODEID_LEVEL_BITS; //>! Maximum 15 levels
+            uint64_t _blockPosX
                 : NODEID_BLOCK_BITS; //>! Maximum 16384 blocks in X dimension
-            Identifier _blockPosY
+            uint64_t _blockPosY
                 : NODEID_BLOCK_BITS; //>! Maximum 16384 blocks in Y dimension
-            Identifier _blockPosZ
+            uint64_t _blockPosZ
                 : NODEID_BLOCK_BITS; //>! Maximum 16384 blocks in Z dimension
-            Identifier _timeStep
+            uint64_t _timeStep
                 : NODEID_TIMESTEP_BITS; //>! Maximum 262144 frames
         };
-        Identifier _id;
+        uint64_t _id;
     };
 
 public:
@@ -57,7 +57,7 @@ public:
      * Constructs a LOD identifier
      * @param identifier Identifier number of the node
      */
-    LIVREDATA_API explicit NodeId(const Identifier& identifier);
+    LIVREDATA_API explicit NodeId(uint64_t identifier);
 
     /**
      * Constructs a LOD identifier
@@ -99,7 +99,7 @@ public:
     LIVREDATA_API NodeIds getChildrenAtLevel(
         const uint32_t level) const;      //<! Returns children at level
     LIVREDATA_API Range getRange() const; //<! Normalized data range within tree
-    LIVREDATA_API Identifier getId() const
+    LIVREDATA_API uint64_t getId() const
     {
         return _id;
     } //<! Returns the unique identifier
@@ -117,10 +117,7 @@ public:
      * @param id The identifier which is compared against
      * @return true if the nodes have the same id
      */
-    LIVREDATA_API bool operator==(const Identifier id) const
-    {
-        return _id == id;
-    }
+    LIVREDATA_API bool operator==(const uint64_t id) const { return _id == id; }
 
     /**
      * @param node The node which is compared against
@@ -135,7 +132,7 @@ public:
      * @param id The identifier which is compared against
      * @return false if two nodes have the same id
      */
-    LIVREDATA_API bool operator!=(const Identifier id) const
+    LIVREDATA_API bool operator!=(const uint64_t id) const
     {
         return _id != id;
     } //<! Checks equality of the node
@@ -153,7 +150,7 @@ public:
      * @param id The identifier which is compared against
      * @return true if id is smaller
      */
-    LIVREDATA_API bool operator<(const Identifier id) const
+    LIVREDATA_API bool operator<(const uint64_t id) const
     {
         return _id < id;
     } //<! Checks equality of the node

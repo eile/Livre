@@ -29,7 +29,7 @@ namespace livre
 /**
  * The TextureObject class holds the informarmation for the data which is on the
  * GPU.
-  */
+ */
 class TextureObject : public CacheObject
 {
 public:
@@ -41,7 +41,7 @@ public:
      * @throws CacheLoadException when the data cache does not have the data for
      * cache id
      */
-    LIVRE_API TextureObject(const CacheId& cacheId, const Cache& dataCache,
+    LIVRE_API TextureObject(uint64_t cacheId, const Cache& dataCache,
                             const DataSource& dataSource,
                             TexturePool& texturePool);
 

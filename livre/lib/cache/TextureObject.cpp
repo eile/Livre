@@ -49,7 +49,7 @@ size_t getTextureSize(const DataSource& dataSource)
   */
 struct TextureObject::Impl
 {
-    Impl(const CacheId& cacheId, const Cache& dataCache,
+    Impl(const uint64_t cacheId, const Cache& dataCache,
          const DataSource& dataSource, TexturePool& texturePool)
         : _textureState(texturePool)
         , _textureSize(getTextureSize(dataSource))
@@ -62,7 +62,7 @@ struct TextureObject::Impl
     }
 
     ~Impl() {}
-    bool load(const CacheId& cacheId, const Cache& dataCache,
+    bool load(const uint64_t cacheId, const Cache& dataCache,
               const DataSource& dataSource, const TexturePool& texturePool)
     {
         ConstDataObjectPtr data = dataCache.get<DataObject>(cacheId);
@@ -73,7 +73,7 @@ struct TextureObject::Impl
         return true;
     }
 
-    void initialize(const CacheId& cacheId, const DataSource& dataSource,
+    void initialize(const uint64_t cacheId, const DataSource& dataSource,
                     const TexturePool& texturePool,
                     const ConstDataObjectPtr& data)
     {
@@ -123,7 +123,7 @@ struct TextureObject::Impl
     size_t _textureSize;
 };
 
-TextureObject::TextureObject(const CacheId& cacheId, const Cache& dataCache,
+TextureObject::TextureObject(const uint64_t cacheId, const Cache& dataCache,
                              const DataSource& dataSource,
                              TexturePool& texturePool)
     : CacheObject(cacheId)

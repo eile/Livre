@@ -26,7 +26,7 @@ NodeId::NodeId()
 {
 }
 
-NodeId::NodeId(const Identifier& identifier)
+NodeId::NodeId(const uint64_t identifier)
     : _id(identifier)
 {
 }

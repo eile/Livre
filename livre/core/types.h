@@ -97,8 +97,6 @@ struct TextureState;
 using servus::uint128_t;
 using lunchbox::Strings;
 
-typedef Identifier CacheId;
-
 /** SmartPtr definitions */
 typedef std::shared_ptr<GLContext> GLContextPtr;
 typedef std::shared_ptr<const GLContext> ConstGLContextPtr;
@@ -132,7 +130,7 @@ typedef std::vector<uint8_t> UInt8s;
 typedef std::vector<uint32_t> UInt32s;
 
 typedef std::vector<NodeId> NodeIds;
-typedef std::vector<CacheId> CacheIds;
+typedef std::vector<uint64_t> CacheIds;
 
 /** Vector definitions for complex types */
 typedef std::vector<CacheObjectPtr> CacheObjects;
@@ -144,8 +142,8 @@ typedef std::list<Future> Futures;
 typedef std::list<Promise> Promises;
 
 /** Map definitions */
-typedef std::unordered_map<CacheId, CacheObjectPtr> CacheMap;
-typedef std::unordered_map<CacheId, ConstCacheObjectPtr> ConstCacheMap;
+typedef std::unordered_map<uint64_t, CacheObjectPtr> CacheMap;
+typedef std::unordered_map<uint64_t, ConstCacheObjectPtr> ConstCacheMap;
 typedef std::unordered_map<uint32_t, bool> BoolMap;
 
 template <class T>
@@ -159,7 +157,7 @@ typedef std::map<std::string, std::type_index> DataInfos;
 typedef DataInfos::value_type DataInfo;
 
 /** Set definitions */
-typedef std::set<CacheId> CacheIdSet;
+typedef std::set<uint64_t> CacheIdSet;
 typedef std::set<NodeId> NodeIdSet;
 
 /** Locking object definitions */
@@ -170,7 +168,7 @@ typedef boost::unique_lock<boost::mutex> ScopedLock;
 
 // Constants
 const uint32_t INVALID_TEXTURE_ID = -1; //!< Invalid OpenGL texture id.
-const Identifier INVALID_CACHE_ID = -1; //!< Invalid cache id.
+const uint64_t INVALID_CACHE_ID = -1;   //!< Invalid cache id.
 
 const uint32_t INVALID_POSITION =
     (1u << NODEID_BLOCK_BITS) - 1; //!< Invalid node ID.

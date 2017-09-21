@@ -26,16 +26,15 @@ namespace livre
 {
 struct CacheObject::Impl
 {
-    Impl(const CacheId& cacheId_)
+    Impl(const uint64_t cacheId_)
         : cacheId(cacheId_)
     {
     }
 
-    CacheId cacheId;
-    ReadWriteMutex mutex;
+    uint64_t cacheId;
 };
 
-CacheObject::CacheObject(const CacheId& cacheId)
+CacheObject::CacheObject(const uint64_t cacheId)
     : _impl(new Impl(cacheId))
 {
 }
@@ -44,7 +43,7 @@ CacheObject::~CacheObject()
 {
 }
 
-CacheId CacheObject::getId() const
+uint64_t CacheObject::getId() const
 {
     return _impl->cacheId;
 }

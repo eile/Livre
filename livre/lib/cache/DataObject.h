@@ -41,7 +41,7 @@ public:
      * @throws CacheLoadException when the data cache does not have the data for
      * cache id
      */
-    LIVRE_API DataObject(const CacheId& cacheId, DataSource& dataSource);
+    LIVRE_API DataObject(uint64_t cacheId, DataSource& dataSource);
     LIVRE_API ~DataObject();
 
     /** @return A pointer to the data or 0 if no data is loaded. */

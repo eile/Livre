@@ -46,7 +46,6 @@ class DataSourcePluginData;
 
 struct VolumeInformation;
 
-typedef uint64_t Identifier;
 typedef std::array<float, 2> Range;
 
 using vmml::Vector2ui;
@@ -77,7 +76,7 @@ typedef std::shared_ptr<MemoryUnit> MemoryUnitPtr;
 typedef std::shared_ptr<const MemoryUnit> ConstMemoryUnitPtr;
 
 // Constants
-const Identifier INVALID_NODE_ID = -1; //!< Invalid node ID.
+const uint64_t INVALID_NODE_ID = -1; //!< Invalid node ID.
 
 const uint32_t MAX_CHILDREN_BITS = 4;     //!< Maximum number of children is 16
 const uint32_t NODEID_LEVEL_BITS = 4;     //>! see NodeId

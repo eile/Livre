@@ -24,7 +24,7 @@
 
 namespace livre
 {
-CacheLoadException::CacheLoadException(const Identifier& id,
+CacheLoadException::CacheLoadException(const uint64_t id,
                                        const std::string& message)
     : _id(id)
     , _message(message)
@@ -40,7 +40,7 @@ const char* CacheLoadException::what() const throw()
 
 struct LRUCachePolicy
 {
-    typedef std::deque<CacheId> LRUQueue;
+    typedef std::deque<uint64_t> LRUQueue;
 
     LRUCachePolicy(const size_t maxMemBytes)
         : _maxMemBytes(maxMemBytes)
@@ -60,13 +60,13 @@ struct LRUCachePolicy
         return usedMemBytes < _cleanUpRatio * _maxMemBytes;
     }
 
-    void insert(const CacheId& cacheId)
+    void insert(const uint64_t cacheId)
     {
         remove(cacheId);
         _lruQueue.push_back(cacheId);
     }
 
-    void remove(const CacheId& cacheId)
+    void remove(const uint64_t cacheId)
     {
         typename LRUQueue::iterator it = _lruQueue.begin();
         while (it != _lruQueue.end())
@@ -114,7 +114,7 @@ struct Cache::Impl
             return;
 
         // Objects are returned in delete order
-        for (const CacheId& cacheId : _policy.getObjects())
+        for (const uint64_t cacheId : _policy.getObjects())
         {
             unloadFromCache(cacheId);
             if (_policy.hasSpace(_cache))
@@ -125,7 +125,7 @@ struct Cache::Impl
     ConstCacheObjectPtr load(ConstCacheObjectPtr obj)
     {
         WriteLock writeLock(_mutex);
-        const CacheId& cacheId = obj->getId();
+        const uint64_t cacheId = obj->getId();
         ConstCacheMap::const_iterator it = _cacheMap.find(cacheId);
         if (it != _cacheMap.end())
             return it->second;
@@ -138,7 +138,7 @@ struct Cache::Impl
         return obj;
     }
 
-    bool unloadFromCache(const CacheId& cacheId)
+    bool unloadFromCache(const uint64_t cacheId)
     {
         ConstCacheMap::iterator it = _cacheMap.find(cacheId);
         if (it == _cacheMap.end())
@@ -155,7 +155,7 @@ struct Cache::Impl
         return true;
     }
 
-    ConstCacheObjectPtr getFromMap(const CacheId& cacheId) const
+    ConstCacheObjectPtr getFromMap(const uint64_t cacheId) const
     {
         ReadLock readLock(_mutex);
         ConstCacheMap::const_iterator it = _cacheMap.find(cacheId);
@@ -169,13 +169,13 @@ struct Cache::Impl
         return it->second;
     }
 
-    bool unload(const CacheId& cacheId)
+    bool unload(const uint64_t cacheId)
     {
         WriteLock lock(_mutex);
         return unloadFromCache(cacheId);
     }
 
-    ConstCacheObjectPtr get(const CacheId& cacheId) const
+    ConstCacheObjectPtr get(const uint64_t cacheId) const
     {
         return getFromMap(cacheId);
     }
@@ -194,7 +194,7 @@ struct Cache::Impl
         _cacheMap.clear();
     }
 
-    void purge(const CacheId& cacheId)
+    void purge(const uint64_t cacheId)
     {
         WriteLock lock(_mutex);
         _cacheMap.erase(cacheId);
@@ -226,7 +226,7 @@ ConstCacheObjectPtr Cache::_load(ConstCacheObjectPtr obj)
     return _impl->load(obj);
 }
 
-bool Cache::unload(const CacheId& cacheId)
+bool Cache::unload(const uint64_t cacheId)
 {
     if (cacheId == INVALID_CACHE_ID)
         return false;
@@ -234,7 +234,7 @@ bool Cache::unload(const CacheId& cacheId)
     return _impl->unload(cacheId);
 }
 
-ConstCacheObjectPtr Cache::get(const CacheId& cacheId) const
+ConstCacheObjectPtr Cache::get(const uint64_t cacheId) const
 {
     if (cacheId == INVALID_CACHE_ID)
         return ConstCacheObjectPtr();
@@ -262,7 +262,7 @@ void Cache::purge()
     _impl->purge();
 }
 
-void Cache::purge(const CacheId& cacheId)
+void Cache::purge(const uint64_t cacheId)
 {
     _impl->purge(cacheId);
 }

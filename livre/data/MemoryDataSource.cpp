@@ -39,7 +39,7 @@ template <typename T>
 MemoryUnitPtr computeData(const LODNode& node, const size_t dataSize,
                           const float sparsity, const Vector3ui& blockSize)
 {
-    const Identifier nodeId = node.getNodeId().getId();
+    const uint64_t nodeId = node.getNodeId().getId();
     const uint8_t* id = reinterpret_cast<const uint8_t*>(&nodeId);
     const T value =
         (id[0] ^ id[1] ^ id[2] ^ id[3]) + 16 +

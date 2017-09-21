@@ -128,7 +128,7 @@ void binData(const SRC_TYPE* rawData, Histogram& histogram,
 struct HistogramObject::Impl
 {
 public:
-    Impl(const CacheId& cacheId, const Cache& dataCache,
+    Impl(const uint64_t cacheId, const Cache& dataCache,
          const DataSource& dataSource, const Vector2f& dataSourceRange)
         : _size(0)
     {
@@ -137,7 +137,7 @@ public:
                 cacheId, "Unable to construct histogram cache object"));
     }
 
-    bool load(const CacheId& cacheId, const Cache& dataCache,
+    bool load(const uint64_t cacheId, const Cache& dataCache,
               const DataSource& dataSource, const Vector2f& dataSourceRange)
     {
         const VolumeInformation& volumeInfo = dataSource.getVolumeInfo();
@@ -227,7 +227,7 @@ public:
     size_t _size;
 };
 
-HistogramObject::HistogramObject(const CacheId& cacheId, const Cache& dataCache,
+HistogramObject::HistogramObject(const uint64_t cacheId, const Cache& dataCache,
                                  const DataSource& dataSource,
                                  const Vector2f& dataSourceRange)
     : CacheObject(cacheId)
