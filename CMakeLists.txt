@@ -40,11 +40,6 @@ if(APPLE) # WAR otherwise MacPorts X11 (/opt/local) is preferred
   include_directories(SYSTEM /opt/X11/include /usr/X11R6/include)
 endif()
 
-if(CMAKE_SYSTEM_NAME MATCHES "Linux")
-  set(TUVOK_QUIET ON)
-  git_subproject(Tuvok https://github.com/SCIInstitute/Tuvok.git master)
-endif()
-
 common_find_package(Boost REQUIRED COMPONENTS filesystem program_options thread
                                               system unit_test_framework)
 common_find_package(Collage REQUIRED)
@@ -59,8 +54,9 @@ common_find_package(Qt5QuickWidgets)
 common_find_package(Qt5Widgets)
 common_find_package(Threads REQUIRED)
 common_find_package(Tuvok)
-if(CMAKE_SYSTEM_NAME MATCHES "Linux" AND CMAKE_COMPILER_IS_CLANG)
-  common_find_package_disable(Tuvok)
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+  set(TUVOK_QUIET ON)
+  git_subproject(Tuvok https://github.com/BlueBrain/Tuvok.git bbp)
 endif()
 common_find_package(ZeroEQ)
 common_find_package(ZeroBuf REQUIRED)
