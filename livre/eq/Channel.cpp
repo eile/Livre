@@ -297,7 +297,7 @@ public:
              PixelViewport(pvp.x, pvp.y, pvp.w, pvp.h),
              Viewport(vp.x, vp.y, vp.w, vp.h),
              getFrameData().getRenderSettings().getClipPlanes(),
-             getFrameData().getFrameSettings().isIdle()},
+             true},
             PipeFilterT<RedrawFilter>("RedrawFilter", _channel),
             PipeFilterT<SendHistogramFilter>("SendHistogramFilter", _channel),
             *_renderer, _availability);

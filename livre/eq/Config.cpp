@@ -265,6 +265,7 @@ void Config::unmapFrameData()
 
 bool Config::init(const int argc, char** argv)
 {
+    setLatency(1);
     _impl->resetCamera();
     FrameData& framedata = _impl->framedata;
     FrameSettings& frameSettings = framedata.getFrameSettings();
