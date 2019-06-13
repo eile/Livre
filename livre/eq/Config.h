@@ -100,6 +100,7 @@ private:
     LIVREEQ_API virtual ~Config();
 
     bool _keepCurrentFrame(uint32_t fps) const;
+    void _toggleHelp();
 
     bool handleEvent(eq::EventType type, const eq::Event& event) final;
     bool handleEvent(eq::EventType type, const eq::KeyEvent&) final;

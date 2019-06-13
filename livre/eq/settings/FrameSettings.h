@@ -55,9 +55,7 @@ public:
 
     /** @return the current frame number to render. */
     uint32_t getFrameNumber() const { return frameNumber_; }
-    /**
-     * @return Returns true if volume info is set.
-     */
+    /** @return Returns true if volume info is set. */
     bool getShowInfo() const;
 
     /**
@@ -85,6 +83,9 @@ public:
     /** @return true if idle rendering is active. */
     bool isIdle() const;
 
+    /** @return Overlay message. */
+    void setMessage(const std::string& message);
+    const std::string& getMessage() const { return message_; }
 private:
     void serialize(co::DataOStream& os, const uint64_t dirtyBits) final;
     void deserialize(co::DataIStream& is, const uint64_t dirtyBits) final;
@@ -93,7 +94,8 @@ private:
     bool statistics_;
     bool info_;
     bool grabFrame_;
-    bool idle_{true};
+    bool idle_ = true;
+    std::string message_;
 };
 }
 

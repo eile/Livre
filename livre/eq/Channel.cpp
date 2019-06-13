@@ -350,6 +350,8 @@ public:
         if (frameSettings.getShowInfo())
             drawVolumeInfo();
 
+        drawMessage();
+
 #ifdef LIVRE_USE_ZEROEQ
         const size_t all =
             _availability.nAvailable + _availability.nNotAvailable;
@@ -441,6 +443,40 @@ public:
         // last line might not end with /n
         glRasterPos3f(10.f, y, 0.99f);
         font->draw(text);
+    }
+
+    void drawMessage()
+    {
+        const auto settings = getFrameData().getFrameSettings();
+        std::string message = settings.getMessage();
+
+        if (message.empty())
+            return;
+
+        const eq::PixelViewport& pvp = _channel->getPixelViewport();
+        const eq::Viewport& vp = _channel->getViewport();
+        const float height = pvp.h / vp.h;
+
+        const eq::util::BitmapFont* font =
+            _channel->getWindow()->getSmallFont();
+
+        const float width = pvp.w / vp.w;
+        const float xOffset = vp.x * width;
+        const float xPos = 16.f - xOffset;
+
+        float y = height - 16.f;
+
+        for (size_t pos = message.find('\n'); pos != std::string::npos;
+             pos = message.find('\n'))
+        {
+            glRasterPos3f(xPos, y, 0.99f);
+            font->draw(message.substr(0, pos));
+            message = message.substr(pos + 1);
+            y -= 22.f;
+        }
+        // last line
+        glRasterPos3f(xPos, y, 0.99f);
+        font->draw(message);
     }
 
     void frameReadback(const eq::Frames& frames) const

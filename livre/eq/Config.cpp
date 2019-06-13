@@ -46,6 +46,12 @@ namespace
 const float ROTATE_AND_ZOOM_SPEED = 0.005f;
 const float PAN_SPEED = 0.0005f;
 const float ADVANCE_SPEED = 0.05f;
+const std::string _help = R"(Livre
+  h: toggle help
+  i: toggle rendering information
+  s: toggle rendering statistics
+  a: toggle axes around volume
+  <space>: reset camera)";
 
 class ViewHistogram
 {
@@ -392,6 +398,15 @@ bool Config::_keepCurrentFrame(const uint32_t fps) const
     return frameDuration < desiredTime;
 }
 
+void Config::_toggleHelp()
+{
+    FrameSettings& frameSettings = getFrameData().getFrameSettings();
+    if (frameSettings.getMessage() == _help)
+        frameSettings.setMessage("");
+    else
+        frameSettings.setMessage(_help);
+}
+
 bool Config::handleEvent(const eq::EventType type, const eq::Event& event)
 {
     switch (type)
@@ -435,6 +450,12 @@ bool Config::handleEvent(const eq::EventType type, const eq::KeyEvent& event)
     case 'i':
     case 'I':
         frameSettings.toggleInfo();
+        return true;
+
+    case eq::KC_F1:
+    case 'h':
+    case 'H':
+        _toggleHelp();
         return true;
 
     default:
